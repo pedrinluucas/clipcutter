@@ -41,7 +41,8 @@ que aprender IPC.
 2. **Ficha do arquivo** via ffprobe: duração, resolução, FPS, codec de vídeo,
    codec de áudio, bitrate, tamanho.
 3. **Player** — play/pause, barra de progresso clicável, volume, velocidade
-   (0.5 / 0.75 / 1 / 1.25 / 1.5 / 2). Tempo em `mm:ss.mmm`.
+   (0.5 / 0.75 / 1 / 1.25 / 1.5 / 2). Tempo em `mm:ss.mmm`, virando
+   `h:mm:ss.mmm` a partir de 1 hora (gravações de imersão passam de 59 minutos).
 4. **Navegação precisa** — atalhos de teclado:
    - `Espaço` — play/pause
    - `←` / `→` — 5 segundos

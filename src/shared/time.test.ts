@@ -10,8 +10,16 @@ describe('formatTime', () => {
     expect(formatTime(90.5)).toBe('01:30.500')
   })
 
-  it('deixa os minutos passarem de 59 em vez de virar hora', () => {
-    expect(formatTime(3600)).toBe('60:00.000')
+  it('vira pra hh:mm:ss.mmm assim que chega em 1 hora', () => {
+    expect(formatTime(3600)).toBe('1:00:00.000')
+  })
+
+  it('mantém mm:ss.mmm logo abaixo de 1 hora', () => {
+    expect(formatTime(3599.999)).toBe('59:59.999')
+  })
+
+  it('soma minutos e segundos corretamente acima de 1 hora', () => {
+    expect(formatTime(3665.25)).toBe('1:01:05.250')
   })
 
   it('arredonda para o milissegundo mais próximo', () => {
@@ -46,7 +54,15 @@ describe('parseTime', () => {
     expect(parseTime('01:75')).toBeNull()
   })
 
-  it('é a volta de formatTime', () => {
+  it('lê o formato com hora', () => {
+    expect(parseTime('1:00:00.000')).toBe(3600)
+  })
+
+  it('é a volta de formatTime abaixo de 1 hora', () => {
     expect(parseTime(formatTime(123.456))).toBeCloseTo(123.456, 3)
+  })
+
+  it('é a volta de formatTime acima de 1 hora', () => {
+    expect(parseTime(formatTime(3665.25))).toBeCloseTo(3665.25, 3)
   })
 })
