@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react'
-import type { FfmpegCheck, VideoInfo } from '@shared/types'
+import type { CutPoint, FfmpegCheck, VideoInfo } from '@shared/types'
+import { movePoint, removePoint } from '@shared/cutPoints'
 import { WelcomeScreen } from './components/WelcomeScreen'
 import { FileInfo } from './components/FileInfo'
 import { FfmpegMissing } from './components/FfmpegMissing'
 import { usePlayer } from './hooks/usePlayer'
 import { VideoPlayer } from './components/VideoPlayer'
 import { PlayerControls } from './components/PlayerControls'
+import { Timeline } from './components/Timeline'
 
 // Componente separado para que os hooks do player só rodem quando já existe vídeo carregado.
 function Editor({ video }: { video: VideoInfo }): React.JSX.Element {
   const player = usePlayer(video)
+  const [points, setPoints] = useState<CutPoint[]>([])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -41,6 +44,14 @@ function Editor({ video }: { video: VideoInfo }): React.JSX.Element {
       <div className="flex min-h-0 flex-col gap-3">
         <VideoPlayer video={video} player={player} />
         <PlayerControls video={video} player={player} />
+        <Timeline
+          video={video}
+          points={points}
+          currentTime={player.currentTime}
+          onSeek={player.seek}
+          onMovePoint={(id, time) => setPoints((p) => movePoint(p, id, time, video.duration))}
+          onRemovePoint={(id) => setPoints((p) => removePoint(p, id))}
+        />
       </div>
       <FileInfo video={video} />
     </div>
