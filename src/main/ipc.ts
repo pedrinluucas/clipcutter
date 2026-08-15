@@ -70,10 +70,19 @@ export function registerIpc(): void {
     }
   })
 
-  ipcMain.on('export:cancel', () => currentJob?.cancel())
+  ipcMain.on('export:cancel', () => cancelCurrentJob())
 
   ipcMain.handle('shell:openFolder', (_event, path: string) => shell.openPath(path))
 
   ipcMain.handle('prefs:get', (): Prefs => getPrefs())
   ipcMain.handle('prefs:set', (_event, patch: Partial<Prefs>): Prefs => setPrefs(patch))
+}
+
+// Exportado para o `before-quit` do processo principal (src/main/index.ts). Nada
+// prende a exportação ao ciclo de vida do app: fechar a janela encerra o processo,
+// e o `ffmpeg.exe` filho ou segue rodando sem cabeça, ou morre num pipe quebrado —
+// e nesse segundo caso ninguém roda a limpeza do arquivo parcial, deixando um
+// `_parte_NN.mp4` truncado com a mesma cara de um arquivo pronto.
+export function cancelCurrentJob(): void {
+  currentJob?.cancel()
 }

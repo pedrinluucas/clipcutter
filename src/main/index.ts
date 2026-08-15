@@ -2,7 +2,7 @@ import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerClipScheme, handleClipProtocol } from './protocol'
-import { registerIpc } from './ipc'
+import { registerIpc, cancelCurrentJob } from './ipc'
 
 registerClipScheme()
 
@@ -32,6 +32,13 @@ function createWindow(): void {
     shell.openExternal(details.url)
     return { action: 'deny' }
   })
+
+  // Backstop: se um `drop` de arquivo escapar do listener do renderer (src/renderer/
+  // src/main.tsx), o comportamento padrão do Chromium é navegar o webContents pra
+  // URL `file://` do arquivo solto — substitui a UI inteira, sem barra de menu e
+  // sem Back. Os dois lados não competem: o do renderer cobre o caso comum, este
+  // é a rede de segurança pra qualquer coisa que passe por cima dele.
+  mainWindow.webContents.on('will-navigate', (event) => event.preventDefault())
 
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
@@ -75,6 +82,13 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+// Sem isto, fechar a janela no meio de uma exportação não leva o job junto: o
+// `ffmpeg.exe` filho fica órfão rodando sem cabeça, ou morre num pipe quebrado sem
+// que a limpeza do arquivo parcial (jobs.ts) chegue a rodar.
+app.on('before-quit', () => {
+  cancelCurrentJob()
 })
 
 // In this file you can include the rest of your app's specific main process
