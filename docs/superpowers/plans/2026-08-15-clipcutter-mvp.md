@@ -2042,6 +2042,19 @@ export function registerIpc(): void {
   })
 
   ipcMain.handle('export:start', async (event, request: ExportRequest): Promise<JobResult> => {
+    // Um trabalho por vez. O guard vive aqui, e não na UI, porque um duplo clique
+    // dispara o handler duas vezes antes do React re-renderizar — e com dois jobs
+    // disputando o mesmo `currentJob`, o `finally` do primeiro a terminar zera a
+    // referência e o Cancelar deixa de funcionar contra o que ainda roda.
+    if (currentJob) {
+      return {
+        status: 'error',
+        files: [],
+        message: 'Já existe uma exportação em andamento.',
+        failedIndex: 0,
+      }
+    }
+
     const job = startExportJob(ffmpegPath, request, (progress) => {
       if (!event.sender.isDestroyed()) event.sender.send('export:progress', progress)
     })
