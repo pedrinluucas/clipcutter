@@ -52,6 +52,7 @@ export function Timeline({
       }}
       onPointerUp={() => setDragging(null)}
       onPointerLeave={() => setDragging(null)}
+      onPointerCancel={() => setDragging(null)}
     >
       <div className="relative mb-1 h-4 font-mono text-[10px] text-[#e7e7f0]/40">
         {ticks.map((t) => (
@@ -82,6 +83,11 @@ export function Timeline({
             style={{ left: percent(point.time) }}
             onPointerDown={(e) => {
               e.stopPropagation()
+              // Captura o ponteiro: sem isto, arrastar o marcador para além da borda do
+              // contêiner dispara `pointerleave` e o marcador congela no meio do gesto. E
+              // como o movePoint limita a [0.05, duração-0.05], arrastar até a borda é o
+              // uso normal, não o caso extremo.
+              e.currentTarget.setPointerCapture(e.pointerId)
               setDragging(point.id)
             }}
             onContextMenu={(e) => {
