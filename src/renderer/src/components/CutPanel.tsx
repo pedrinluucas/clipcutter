@@ -73,7 +73,9 @@ export function CutPanel({
       </div>
 
       <p className="mt-3 font-mono text-sm">
-        <span className="text-[#06d6a0]">{cuts.segments.length} partes</span>
+        <span className="text-[#06d6a0]">
+          {cuts.segments.length} {cuts.segments.length === 1 ? 'parte' : 'partes'}
+        </span>
         {last && (
           <>
             <span className="text-[#e7e7f0]/40"> · última com </span>

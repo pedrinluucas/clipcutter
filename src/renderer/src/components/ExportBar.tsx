@@ -9,6 +9,7 @@ export function ExportBar({
   partCount: number
 }): React.JSX.Element {
   const pct = Math.round((exp.progress?.overallFraction ?? 0) * 100)
+  const segPct = Math.round((exp.progress?.segmentFraction ?? 0) * 100)
 
   return (
     <div className="rounded-lg bg-[#1a1a2e] p-4">
@@ -53,17 +54,27 @@ export function ExportBar({
             disabled={!exp.outputDir}
             className="flex items-center gap-2 rounded bg-[#06d6a0] px-4 py-2 font-medium text-[#0f0f1a] transition-colors duration-150 hover:bg-[#06d6a0]/80 disabled:opacity-30"
           >
-            <Download size={16} /> Exportar {partCount} partes
+            <Download size={16} /> Exportar {partCount} {partCount === 1 ? 'parte' : 'partes'}
           </button>
         )}
       </div>
 
       {exp.running && (
         <div className="mt-3">
-          <div className="h-2 overflow-hidden rounded bg-[#252547]">
+          <div className="h-2 overflow-hidden rounded bg-[#252547]" title="Progresso geral">
             <div
               className="h-full bg-[#4361ee] transition-[width] duration-150"
               style={{ width: `${pct}%` }}
+            />
+          </div>
+          {/* Barra mais fina: progresso DENTRO da parte atual. A de cima é a fila
+              inteira; sem esta, "progresso por parte e geral" (spec §7) só metade
+              existia — o dado já era calculado e enviado (jobs.ts), só não tinha
+              onde aparecer. */}
+          <div className="mt-1 h-1 overflow-hidden rounded bg-[#252547]" title="Progresso da parte atual">
+            <div
+              className="h-full bg-[#06d6a0] transition-[width] duration-150"
+              style={{ width: `${segPct}%` }}
             />
           </div>
           <p className="mt-2 font-mono text-xs text-[#e7e7f0]/60">
