@@ -101,6 +101,48 @@ html, body, #root { height: 100%; }
 body { background: var(--color-base); color: #e7e7f0; font-family: Inter, system-ui, sans-serif; }
 ```
 
+- [ ] **Step 3b: Liberar o esquema `clip:` na CSP — sem isto o player fica preto**
+
+O template gera uma `Content-Security-Policy` sem `media-src`, então ela cai em
+`default-src 'self'`. O `<video>` da Task 12 carrega de `clip://local/?p=...`, que
+não é `'self'`, e o navegador **recusa a mídia**: o player renderiza preto e o
+único sinal é uma linha `Refused to load media` no console do DevTools.
+
+Este defeito nasce entre três tasks — a CSP aqui, o protocolo na Task 10, o
+`<video>` na Task 12 — e nenhuma revisão de task consegue vê-lo, porque nenhum
+diff contém a regra e a coisa bloqueada por ela ao mesmo tempo.
+
+Em `src/renderer/index.html`, acrescentar `media-src` ao `content` da meta:
+
+```html
+<!--
+  NÃO mover esta meta para o topo do <head>. Em desenvolvimento o Vite injeta o
+  preâmbulo de refresh do React com `injectTo: 'head-prepend'`, ou seja ACIMA
+  desta tag — e uma CSP em meta não governa o que foi parseado antes dela. Movida
+  para cima, `script-src 'self'` bloqueia esse preâmbulo e a janela abre em branco,
+  com o erro só no console.
+  `media-src ... clip:` é o que permite o <video> carregar pelo protocolo custom.
+-->
+<meta
+  http-equiv="Content-Security-Policy"
+  content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' clip:"
+/>
+```
+
+Usar a CSP, e **não** `bypassCSP: true` nos privilégios do esquema: a primeira é
+comprovável lendo a política, a segunda depende de semântica de privilégio.
+
+- [ ] **Step 3c: Teste que trava essa regra**
+
+A lição do defeito acima é que uma fronteira CSP/protocolo precisa de verificação
+automatizada, já que ninguém consegue abrir a janela durante a construção.
+
+Criar `src/renderer/csp.test.ts`: lê a meta do `index.html` real, parseia as
+diretivas, e afirma que `media-src` contém `clip:`, que `img-src` contém `data:` e
+que `style-src` contém `'unsafe-inline'`. Deve **falhar** se alguém remover
+`media-src` ou a tag inteira — confirme isso removendo a diretiva de propósito uma
+vez, e restaure.
+
 - [ ] **Step 4: Configurar a janela**
 
 Substituir a criação da janela em `src/main/index.ts` pelos valores do spec (o resto do arquivo gerado pelo template continua igual):
@@ -2349,6 +2391,34 @@ contextBridge.exposeInMainWorld('clip', api)
 
 > **Nota da revisão final (fix wave):** `fileUrl` reimplementava a mesma string que `protocol.ts` já montava em `toClipUrl` — duas cópias idênticas, uma testada e morta (`protocol.ts`, nada a importava), a outra viva e sem teste algum (esta, o que o `<video>` do player de fato usa). Ambas foram para `src/shared/clipUrl.ts`; esta função agora importa de lá.
 
+- [ ] **Step 4b: Matar a exportação em andamento ao fechar o app**
+
+Nada amarra o job ao tempo de vida do app. Fechar a janela dispara
+`window-all-closed → app.quit()`, e o `ffmpeg.exe` gerado não morre junto no
+Windows: ou segue codificando sem dono, ou morre no cano quebrado — e nesse caso
+ninguém roda a limpeza do arquivo parcial, então sobra um `_parte_NN.mp4`
+truncado com cara de parte pronta.
+
+Exportar o cancelamento em `src/main/ipc.ts`:
+
+```ts
+export function cancelCurrentJob(): void {
+  currentJob?.cancel()
+}
+```
+
+E chamar em `src/main/index.ts`:
+
+```ts
+app.on('before-quit', () => cancelCurrentJob())
+```
+
+Isto fecha a metade do encoder órfão: o `execFile` do `taskkill` nasce de forma
+síncrona, então o matador existe antes do handler retornar e sobrevive à saída do
+pai. A metade do arquivo truncado continua sendo melhor esforço — a limpeza só
+roda depois da promise rejeitar, e o app já está desmontando. Fechar de verdade
+exigiria `event.preventDefault()`, esperar o job e só então `app.quit()`.
+
 - [ ] **Step 5: Ligar tudo no processo principal**
 
 Em `src/main/index.ts`, adicionar os imports e as chamadas. `registerClipScheme()` vai no topo do módulo (antes do `app.whenReady()`); as outras duas, dentro do `whenReady`:
@@ -2523,6 +2593,36 @@ export function FfmpegMissing({ message }: { message: string }): React.JSX.Eleme
   )
 }
 ```
+
+- [ ] **Step 5b: Impedir que soltar um arquivo FORA da caixa destrua a sessão**
+
+A zona tracejada chama `preventDefault()`, mas só ela. Toda a margem em volta e a
+tela inteira do editor ficam desprotegidas — e o comportamento padrão do Chromium
+ao receber um arquivo é **navegar para ele**. A janela troca o app por um player
+embutido (ou por nada, se o container não for suportado), e não há volta: a barra
+de menu está escondida e não existe botão Voltar. No editor isso leva junto toda a
+lista de pontos de corte.
+
+Duas camadas, as duas necessárias. Em `src/renderer/src/main.tsx`, antes do
+`createRoot`:
+
+```ts
+// O padrão do Chromium ao soltar um arquivo é navegar até ele, o que substitui o
+// app inteiro sem volta. A zona de drop trata o caso feliz; isto trata todo o
+// resto da janela.
+document.addEventListener('dragover', (e) => e.preventDefault())
+document.addEventListener('drop', (e) => e.preventDefault())
+```
+
+E em `src/main/index.ts`, no `createWindow`, como rede de segurança:
+
+```ts
+mainWindow.webContents.on('will-navigate', (event) => event.preventDefault())
+```
+
+Nota de desenvolvimento: essa segunda guarda também bloqueia o recarregamento
+completo do Vite (`location.reload()`). Edições de componente com hot reload
+continuam funcionando; recarregar de propósito, use `Ctrl+R`.
 
 - [ ] **Step 6: Criar a tela inicial com drag & drop**
 
@@ -2982,7 +3082,11 @@ return (
 Run: `npm start`
 
 Conferir:
-1. O vídeo **aparece e toca** — se a tela ficar preta, o protocolo `clip://` da Task 10 está com problema (abrir o DevTools e olhar a aba Network).
+1. O vídeo **aparece e toca**. Se a tela ficar preta, abra o DevTools e leia o
+   console ANTES de suspeitar do protocolo: `Refused to load media from 'clip://...'`
+   significa que a CSP do `index.html` perdeu o `media-src` (Task 1, Step 3b) — é a
+   causa mais provável e não tem nada a ver com o `protocol.handle`. Só se o console
+   estiver limpo é que o problema está no protocolo da Task 10; aí sim, aba Network.
 2. Apertar `L` várias vezes seguidas para pular bem longe (num vídeo de 10min, uns 20 toques): o vídeo continua tocando a partir dali sem travar. Isso prova que o *Range* funciona — sem ele, o salto congela ou volta pro início. (A barra de tempo clicável chega na Task 13; aqui a navegação é só pelo teclado.)
 3. `Espaço` dá play/pause. `←`/`→` andam 5s. `J`/`L` andam 10s.
 4. `,` e `.` andam **um quadro** — o tempo muda em ~0.033s num vídeo de 30fps.
@@ -3438,7 +3542,7 @@ s: () => cuts.addAt(player.currentTime),
 
 E incluir `cuts` e `player` nas dependências do `useEffect`.
 
-A `<Timeline>` passa a receber `points={cuts.points}`, `onMovePoint={cuts.move}`, `onRemovePoint={cuts.remove}`. O `<CutPanel>` entra abaixo da timeline.
+A `<Timeline>` passa a receber `points={cuts.points}`, `onMovePoint={cuts.move}`, `onRemovePoint={cuts.remove}` e `onDragPoint={cuts.drag}` (esta última é obrigatória — sem ela o wiring temporário da Task 13 fica apontando para um `setPoints` que deixou de existir, e não compila). O `<CutPanel>` entra abaixo da timeline.
 
 - [ ] **Step 4: Verificar manualmente**
 

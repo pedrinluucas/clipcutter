@@ -151,7 +151,10 @@ dá pra arrastar, apagar e misturar os dois livremente.
 
 Casos de borda definidos:
 
-- Duração pedida ≥ duração do vídeo ⇒ zero pontos, uma parte só.
+- Duração pedida ≥ duração do vídeo ⇒ zero pontos, uma parte só — **desde que a
+  lista já esteja vazia**. Se houver pontos marcados na mão, "Gerar cortes" não
+  substitui por vazio: substituir aí seria deleção pura, sem divisão nenhuma em
+  troca. A lista fica como está.
 - Última parte menor que a duração pedida ⇒ é mantida, e a UI avisa
   (`última com 12.4s`).
 - Ponto arrastado para além de um vizinho ⇒ a lista reordena; se colar em
