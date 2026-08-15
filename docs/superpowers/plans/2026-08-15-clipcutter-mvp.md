@@ -1391,6 +1391,21 @@ import { buildCutArgs } from './args'
 const run = promisify(execFile)
 let dir = ''
 let source = ''
+let heavy = ''
+
+// Devolve a duração do arquivo, ou null se o ffprobe não conseguir lê-lo.
+const duracaoOuNull = async (file: string): Promise<number | null> => {
+  try {
+    const { stdout } = await run('ffprobe', [
+      '-v', 'error', '-show_entries', 'format=duration',
+      '-print_format', 'default=nw=1:nk=1', file,
+    ])
+    const valor = Number(stdout.trim())
+    return Number.isFinite(valor) ? valor : null
+  } catch {
+    return null
+  }
+}
 
 beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), 'clipcutter-'))
@@ -1401,6 +1416,16 @@ beforeAll(async () => {
     '-f', 'lavfi', '-i', 'sine=frequency=440:duration=10',
     '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', '-shortest', '-y', source,
+  ])
+
+  // Fonte maior, só para o teste de cancelamento: o encode precisa durar o
+  // suficiente para o cancelamento pegar o processo no meio.
+  heavy = join(dir, 'pesado.mp4')
+  await run('ffmpeg', [
+    '-hide_banner', '-loglevel', 'error',
+    '-f', 'lavfi', '-i', 'testsrc=size=1280x720:rate=30:duration=30',
+    '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p',
+    '-y', heavy,
   ])
 }, 120_000)
 
@@ -1430,15 +1455,32 @@ describe('runFfmpeg (integração — exige ffmpeg instalado)', () => {
     await expect(handle.promise).rejects.toThrow()
   })
 
-  it('cancela e rejeita com FfmpegCancelled', async () => {
+  it('cancela, mata o processo e deixa o arquivo incompleto', async () => {
     const output = join(dir, 'cancelado.mp4')
     const handle = runFfmpeg(
       'ffmpeg',
-      buildCutArgs({ inputPath: source, outputPath: output, start: 0, duration: 10, mode: 'exact' }),
+      buildCutArgs({ inputPath: heavy, outputPath: output, start: 0, duration: 30, mode: 'exact' }),
       () => {},
     )
+    const iniciou = Date.now()
     setTimeout(() => handle.cancel(), 150)
     await expect(handle.promise).rejects.toBeInstanceOf(FfmpegCancelled)
+
+    // Prova CATEGÓRICA de que o processo morreu no meio, e não medida de tempo.
+    // O muxer de mp4 grava o índice (moov) só no fim do encode, e o taskkill é
+    // encerramento forçado — então um processo morto nunca chega a gravar índice
+    // e o ffprobe não consegue ler o arquivo. Se o taskkill falhasse, o encode
+    // terminaria e o arquivo teria os 30s legíveis.
+    //
+    // Uma versão anterior deste teste media tempo decorrido (< 3000ms). Não tinha
+    // dente: com o killTree quebrado de propósito, o encode natural terminava em
+    // 889ms e o teste passava igual. Limite calibrado na velocidade de UMA máquina
+    // não é evidência.
+    const duracao = await duracaoOuNull(output)
+    expect(duracao === null || duracao < 5).toBe(true)
+
+    // Limite frouxo, só detector de travamento — não é a prova do cancelamento.
+    expect(Date.now() - iniciou).toBeLessThan(10_000)
   })
 })
 ```
@@ -1474,7 +1516,12 @@ function killTree(pid: number): void {
   if (process.platform === 'win32') {
     // No Windows, matar só o processo do Node deixa o ffmpeg filho vivo
     // segurando o arquivo de saída aberto. /T mata a árvore, /F força.
-    execFile('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true }, () => {})
+    execFile('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true }, (err) => {
+      // Não rejeitamos aqui: o taskkill devolve erro benigno quando o processo já
+      // morreu sozinho na corrida com o cancelamento. O log existe para o caso em
+      // que ele falha de verdade e o processo sobrevive.
+      if (err) console.error('taskkill falhou:', err.message)
+    })
   } else {
     process.kill(-pid, 'SIGKILL')
   }
@@ -1510,7 +1557,9 @@ export function runFfmpeg(
   })
 
   const promise = new Promise<void>((resolve, reject) => {
-    child.on('error', (err) => reject(err))
+    child.on('error', (err) =>
+      reject(new Error(`Falha ao iniciar o FFmpeg: ${err.message}`)),
+    )
     child.on('close', (code) => {
       if (cancelled) return reject(new FfmpegCancelled())
       if (code === 0) return resolve()
