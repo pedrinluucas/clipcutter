@@ -5,15 +5,18 @@ import { FileInfo } from './components/FileInfo'
 import { FfmpegMissing } from './components/FfmpegMissing'
 import { usePlayer } from './hooks/usePlayer'
 import { useCutPoints } from './hooks/useCutPoints'
+import { useExport } from './hooks/useExport'
 import { VideoPlayer } from './components/VideoPlayer'
 import { PlayerControls } from './components/PlayerControls'
 import { Timeline } from './components/Timeline'
 import { CutPanel } from './components/CutPanel'
+import { ExportBar } from './components/ExportBar'
 
 // Componente separado para que os hooks do player só rodem quando já existe vídeo carregado.
 function Editor({ video }: { video: VideoInfo }): React.JSX.Element {
   const player = usePlayer(video)
   const cuts = useCutPoints(video.duration)
+  const exp = useExport(video, cuts.segments)
   const [chunk, setChunk] = useState(30)
 
   useEffect(() => {
@@ -77,6 +80,7 @@ function Editor({ video }: { video: VideoInfo }): React.JSX.Element {
           onChunkChange={changeChunk}
           currentTime={player.currentTime}
         />
+        <ExportBar exp={exp} partCount={cuts.segments.length} />
       </div>
       <FileInfo video={video} />
     </div>
