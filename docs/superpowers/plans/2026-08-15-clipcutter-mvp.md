@@ -1611,7 +1611,7 @@ Criar `src/main/jobs.integration.test.ts`:
 
 ```ts
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { mkdtemp, rm, readdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { execFile } from 'node:child_process'
@@ -1660,8 +1660,13 @@ afterAll(async () => {
 })
 
 describe('startExportJob (integração — exige ffmpeg instalado)', () => {
+  // Cada teste escreve na SUA pasta. Compartilhar uma pasta faz o segundo teste
+  // colidir com os arquivos do primeiro, o `uniqueFileName` renomear para
+  // `_01 (2).mp4` — corretamente — e a asserção de nome exato quebrar. O defeito
+  // seria do teste, não do código.
   it('gera uma parte por segmento, com as durações certas', async () => {
-    const job = startExportJob('ffmpeg', request(), () => {})
+    const dirPartes = join(dir, 'saida-partes')
+    const job = startExportJob('ffmpeg', request({ outputDir: dirPartes }), () => {})
     const result = await job.promise
 
     expect(result.status).toBe('done')
@@ -1672,9 +1677,10 @@ describe('startExportJob (integração — exige ffmpeg instalado)', () => {
   })
 
   it('nomeia as partes em ordem', async () => {
-    const job = startExportJob('ffmpeg', request(), () => {})
+    const dirNomes = join(dir, 'saida-nomes')
+    const job = startExportJob('ffmpeg', request({ outputDir: dirNomes }), () => {})
     await job.promise
-    const files = (await readdir(outDir)).filter((f) => f.startsWith('fonte_parte_')).sort()
+    const files = (await readdir(dirNomes)).filter((f) => f.startsWith('fonte_parte_')).sort()
     expect(files.slice(0, 3)).toEqual([
       'fonte_parte_01.mp4',
       'fonte_parte_02.mp4',
@@ -1694,7 +1700,8 @@ describe('startExportJob (integração — exige ffmpeg instalado)', () => {
 
   it('reporta progresso geral crescente de 0 a 1', async () => {
     const seen: JobProgress[] = []
-    const job = startExportJob('ffmpeg', request(), (p) => seen.push(p))
+    const dirProgresso = join(dir, 'saida-progresso')
+    const job = startExportJob('ffmpeg', request({ outputDir: dirProgresso }), (p) => seen.push(p))
     await job.promise
 
     expect(seen.length).toBeGreaterThan(0)
@@ -1816,7 +1823,16 @@ export function startExportJob(
         await handle.promise
         done.push(outputPath)
       } catch (error) {
-        rmSync(outputPath, { force: true })
+        try {
+          rmSync(outputPath, { force: true })
+        } catch (rmError) {
+          // `force: true` só perdoa ENOENT. EBUSY/EPERM acontece no Windows
+          // quando antivírus ou indexação ainda seguram o arquivo recém-escrito.
+          // Não pode escapar: esta promise atravessa o IPC e uma rejeição
+          // travaria a UI em "exportando". Sobrar um arquivo parcial em disco é
+          // o mal menor.
+          console.error('Não consegui apagar o arquivo parcial:', outputPath, rmError)
+        }
         if (error instanceof FfmpegCancelled || cancelled) {
           return { status: 'cancelled', files: done }
         }
