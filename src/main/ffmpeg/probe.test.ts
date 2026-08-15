@@ -70,4 +70,37 @@ describe('parseProbeOutput', () => {
     const semBitrate = { ...sample, format: { duration: '10', size: '100' } }
     expect(parseProbeOutput(semBitrate, 'C:\\v\\a.mp4').bitrate).toBeNull()
   })
+
+  it('ignora capa embutida e usa o fluxo de vídeo real', () => {
+    const comCapa = {
+      ...sample,
+      streams: [
+        {
+          codec_type: 'video',
+          codec_name: 'mjpeg',
+          width: 300,
+          height: 169,
+          r_frame_rate: '90000/1',
+          disposition: { attached_pic: 1 },
+        },
+        ...sample.streams,
+      ],
+    }
+    const info = parseProbeOutput(comCapa, 'C:\\videos\\baixado.mp4')
+    expect(info.videoCodec).toBe('h264')
+    expect(info.width).toBe(1920)
+    expect(info.height).toBe(1080)
+    expect(info.fps).toBe(29.97)
+  })
+
+  it('recusa arquivo cujo único fluxo de vídeo é capa embutida', () => {
+    const soCapa = {
+      ...sample,
+      streams: [
+        { codec_type: 'video', codec_name: 'png', width: 300, height: 300, disposition: { attached_pic: 1 } },
+        sample.streams[1],
+      ],
+    }
+    expect(() => parseProbeOutput(soCapa, 'C:\\musica\\faixa.mp3')).toThrow(/faixa de vídeo/)
+  })
 })

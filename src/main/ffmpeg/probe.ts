@@ -11,6 +11,7 @@ type ProbeStream = {
   width?: number
   height?: number
   r_frame_rate?: string
+  disposition?: { attached_pic?: number }
 }
 
 type ProbeOutput = {
@@ -30,7 +31,9 @@ export function parseProbeOutput(raw: unknown, filePath: string): VideoInfo {
   const data = raw as ProbeOutput
   const streams = data.streams ?? []
 
-  const video = streams.find((s) => s.codec_type === 'video')
+  const video = streams.find(
+    (s) => s.codec_type === 'video' && s.disposition?.attached_pic !== 1,
+  )
   if (!video) throw new Error('O arquivo não tem faixa de vídeo.')
 
   const audio = streams.find((s) => s.codec_type === 'audio')
