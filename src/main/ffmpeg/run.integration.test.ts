@@ -65,7 +65,13 @@ describe('runFfmpeg (integração — exige ffmpeg instalado)', () => {
       buildCutArgs({ inputPath: heavy, outputPath: output, start: 0, duration: 30, mode: 'exact' }),
       () => {},
     )
+    const iniciou = Date.now()
     setTimeout(() => handle.cancel(), 150)
     await expect(handle.promise).rejects.toBeInstanceOf(FfmpegCancelled)
+
+    // Se o taskkill não matasse nada, o ffmpeg terminaria o encode natural (vários
+    // segundos) e o close ainda rejeitaria como cancelado — o teste passaria sem
+    // provar nada. O tempo decorrido é o que prova que o processo morreu cedo.
+    expect(Date.now() - iniciou).toBeLessThan(3000)
   })
 })

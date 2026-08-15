@@ -19,7 +19,12 @@ function killTree(pid: number): void {
   if (process.platform === 'win32') {
     // No Windows, matar só o processo do Node deixa o ffmpeg filho vivo
     // segurando o arquivo de saída aberto. /T mata a árvore, /F força.
-    execFile('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true }, () => {})
+    execFile('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true }, (err) => {
+      // Não rejeitamos aqui: o taskkill devolve erro benigno quando o processo já
+      // morreu sozinho na corrida com o cancelamento. O log existe para o caso em
+      // que ele falha de verdade e o processo sobrevive.
+      if (err) console.error('taskkill falhou:', err.message)
+    })
   } else {
     process.kill(-pid, 'SIGKILL')
   }
@@ -55,7 +60,9 @@ export function runFfmpeg(
   })
 
   const promise = new Promise<void>((resolve, reject) => {
-    child.on('error', (err) => reject(err))
+    child.on('error', (err) =>
+      reject(new Error(`Falha ao iniciar o FFmpeg: ${err.message}`)),
+    )
     child.on('close', (code) => {
       if (cancelled) return reject(new FfmpegCancelled())
       if (code === 0) return resolve()
