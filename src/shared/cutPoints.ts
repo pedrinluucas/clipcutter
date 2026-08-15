@@ -4,6 +4,8 @@ export const MIN_GAP = 0.05
 
 const round3 = (n: number): number => Math.round(n * 1000) / 1000
 
+const tooClose = (a: number, b: number): boolean => round3(Math.abs(a - b)) < MIN_GAP
+
 export function clampTime(time: number, duration: number): number {
   const lo = MIN_GAP
   const hi = round3(duration - MIN_GAP)
@@ -37,7 +39,7 @@ export function addPoint(
   id: string,
 ): CutPoint[] {
   const target = clampTime(time, duration)
-  if (points.some((p) => Math.abs(p.time - target) < MIN_GAP)) return points
+  if (points.some((p) => tooClose(p.time, target))) return points
   return [...points, { id, time: target }].sort(byTime)
 }
 
@@ -50,7 +52,7 @@ export function movePoint(
   if (!points.some((p) => p.id === id)) return points
   const target = clampTime(time, duration)
   return points
-    .filter((p) => p.id === id || Math.abs(p.time - target) >= MIN_GAP)
+    .filter((p) => p.id === id || !tooClose(p.time, target))
     .map((p) => (p.id === id ? { ...p, time: target } : p))
     .sort(byTime)
 }

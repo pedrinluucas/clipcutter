@@ -91,6 +91,11 @@ describe('addPoint', () => {
     expect(addPoint(pts(10), 10.05, 100, 'novo')).toHaveLength(2)
   })
 
+  it('aceita ponto a exatamente MIN_GAP mesmo com erro de ponto flutuante', () => {
+    // 59.05 - 59 dá 0.04999999999999716 em ponto flutuante cru
+    expect(addPoint(pts(59), 59.05, 100, 'novo')).toHaveLength(2)
+  })
+
   it('limita o ponto às bordas do vídeo', () => {
     expect(addPoint([], 999, 100, 'novo')[0].time).toBe(99.95)
     expect(addPoint([], 0, 100, 'novo')[0].time).toBe(0.05)
@@ -117,6 +122,12 @@ describe('movePoint', () => {
 
   it('ignora id inexistente', () => {
     expect(movePoint(pts(10), 'fantasma', 50, 100).map((p) => p.time)).toEqual([10])
+  })
+
+  it('não colapsa vizinho a exatamente MIN_GAP com erro de ponto flutuante', () => {
+    const result = movePoint(pts(59, 80), 'id2', 59.05, 100)
+    expect(result).toHaveLength(2)
+    expect(result.map((p) => p.time)).toEqual([59, 59.05])
   })
 })
 
