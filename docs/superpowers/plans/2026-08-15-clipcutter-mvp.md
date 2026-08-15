@@ -3165,7 +3165,7 @@ git commit -m "feat: painel de corte com geracao por duracao e marcacao manual"
 Criar `src/renderer/src/hooks/useExport.ts`:
 
 ```ts
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { JobProgress, JobResult, Segment, VideoInfo } from '@shared/types'
 import { outputExtension } from '@shared/naming'
 
@@ -3197,8 +3197,22 @@ export function useExport(video: VideoInfo, segments: Segment[]) {
     void window.clip.setPrefs({ outputDir: dir })
   }, [])
 
+  const emAndamento = useRef(false)
+
   const start = useCallback(async () => {
-    if (!outputDir) return
+    // Guarda SÍNCRONA de reentrância. Não pode ser o estado `running`: estado só
+    // reflete a mudança no próximo render, então dois eventos no mesmo tique
+    // leriam `false` nos dois e passariam ambos — que é exatamente o caso que
+    // produz o bug. O ref muda na hora.
+    //
+    // Isto não compete com a guarda do processo principal (ipc.ts). Aquela é a
+    // autoridade sobre "existe job rodando"; esta impede o hook de se invocar
+    // duas vezes. Sem ela: o main aceita o primeiro clique e RECUSA o segundo na
+    // hora; a recusa resolve antes do job real, seu `finally` zera `running`, e
+    // como a barra de progresso e o Cancelar dependem de `running`, os dois somem
+    // enquanto o ffmpeg ainda trabalha — sem jeito de cancelar.
+    if (!outputDir || emAndamento.current) return
+    emAndamento.current = true
     setRunning(true)
     setResult(null)
     setProgress(null)
@@ -3223,6 +3237,7 @@ export function useExport(video: VideoInfo, segments: Segment[]) {
         failedIndex: 0,
       })
     } finally {
+      emAndamento.current = false
       setRunning(false)
     }
   }, [outputDir, exactMode, segments, video])
