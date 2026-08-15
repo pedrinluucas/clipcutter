@@ -1301,7 +1301,8 @@ describe('locateBinaries (integração — exige ffmpeg instalado)', () => {
 - [ ] **Step 6: Rodar todos os testes**
 
 Run: `npm test`
-Expected: PASS — todos, incluindo os 10 de `probe` e o de integração do `locate`
+Expected: PASS — todos, incluindo os 9 de `probe` e o de integração do `locate`
+(suíte total: 75)
 
 - [ ] **Step 7: Commit**
 
