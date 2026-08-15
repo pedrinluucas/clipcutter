@@ -15,6 +15,13 @@ export type FfmpegHandle = {
 
 const STDERR_LINES_KEPT = 12
 
+// Se o `taskkill` falhar de verdade (não a corrida benigna comentada em
+// `killTree`), `close` nunca dispara e a promise nunca se resolve. Sem um limite,
+// isso trava `ipc.ts` pra sempre: o `finally` que zera `currentJob` depende desta
+// promise assentar, e enquanto ela não assenta, toda exportação seguinte esbarra
+// em "Já existe uma exportação em andamento" até reiniciar o app inteiro.
+const KILL_TIMEOUT_MS = 5000
+
 function killTree(pid: number): void {
   if (process.platform === 'win32') {
     // No Windows, matar só o processo do Node deixa o ffmpeg filho vivo
@@ -43,6 +50,9 @@ export function runFfmpeg(
   const reader = createProgressReader()
   const errors: string[] = []
   let cancelled = false
+  let closed = false
+  let killTimer: ReturnType<typeof setTimeout> | null = null
+  let forceCancel: (() => void) | null = null
 
   child.stdout.setEncoding('utf8')
   child.stdout.on('data', (chunk: string) => {
@@ -60,10 +70,17 @@ export function runFfmpeg(
   })
 
   const promise = new Promise<void>((resolve, reject) => {
+    forceCancel = () => reject(new FfmpegCancelled())
+
     child.on('error', (err) =>
       reject(new Error(`Falha ao iniciar o FFmpeg: ${err.message}`)),
     )
     child.on('close', (code) => {
+      closed = true
+      if (killTimer) {
+        clearTimeout(killTimer)
+        killTimer = null
+      }
       if (cancelled) return reject(new FfmpegCancelled())
       if (code === 0) return resolve()
       const detail = errors.length > 0 ? errors.join('\n') : `código de saída ${code}`
@@ -77,6 +94,14 @@ export function runFfmpeg(
       if (cancelled || child.pid === undefined) return
       cancelled = true
       killTree(child.pid)
+      // Rede de segurança contra o `taskkill` que falha de verdade: se `close` não
+      // disparar dentro do prazo, força o assentamento mesmo assim. O processo pode
+      // continuar vivo — mas é o mal menor: `jobs.ts` tenta apagar o arquivo parcial
+      // e tolera falhar (o processo zumbi pode segurar o arquivo), e o app volta a
+      // aceitar exportações em vez de ficar preso pra sempre.
+      killTimer = setTimeout(() => {
+        if (!closed) forceCancel?.()
+      }, KILL_TIMEOUT_MS)
     },
   }
 }
