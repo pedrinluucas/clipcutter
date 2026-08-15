@@ -21,6 +21,25 @@ export function usePlayer(video: VideoInfo) {
     return () => cancelAnimationFrame(frame)
   }, [])
 
+  // O elemento é a fonte da verdade sobre estar tocando. Sem isto, um vídeo que
+  // termina sozinho deixa `playing` preso em true: o botão mostra "pausar", e o
+  // clique seguinte cai no ramo play() — que, num vídeo terminado, rebobina pro
+  // zero. Ou seja, apertar pausar recomeçaria o clipe.
+  useEffect(() => {
+    const element = videoRef.current
+    if (!element) return
+    const aoTocar = (): void => setPlaying(true)
+    const aoParar = (): void => setPlaying(false)
+    element.addEventListener('play', aoTocar)
+    element.addEventListener('pause', aoParar)
+    element.addEventListener('ended', aoParar)
+    return () => {
+      element.removeEventListener('play', aoTocar)
+      element.removeEventListener('pause', aoParar)
+      element.removeEventListener('ended', aoParar)
+    }
+  }, [])
+
   const seek = useCallback(
     (time: number) => {
       const element = videoRef.current
@@ -36,10 +55,8 @@ export function usePlayer(video: VideoInfo) {
     if (!element) return
     if (element.paused) {
       void element.play()
-      setPlaying(true)
     } else {
       element.pause()
-      setPlaying(false)
     }
   }, [])
 
@@ -53,7 +70,6 @@ export function usePlayer(video: VideoInfo) {
       const element = videoRef.current
       if (!element) return
       element.pause()
-      setPlaying(false)
       const frame = video.fps > 0 ? 1 / video.fps : 1 / 30
       seek(element.currentTime + direction * frame)
     },
