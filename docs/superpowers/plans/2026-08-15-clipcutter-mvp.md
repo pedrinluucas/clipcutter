@@ -3094,8 +3094,20 @@ const cuts = useCutPoints(video.duration)
 const [chunk, setChunk] = useState(30)
 
 useEffect(() => {
-  window.clip.getPrefs().then((p) => setChunk(p.chunkDuration))
-}, [])
+  // A duração vem da sessão anterior e pode ser MAIOR que este vídeo. Sem o limite,
+  // o `<input type="range">` trava o valor renderizado no seu max mas o
+  // `<input type="number">` não limita o exibido (ali min/max só governam estilo de
+  // inválido) — os dois controles passam a discordar na tela. E aí "Gerar cortes"
+  // gera lista vazia e SUBSTITUI por vazio os marcadores que o usuário já colocou
+  // na mão, sem erro nenhum.
+  //
+  // O valor limitado NÃO é persistido de propósito: só `changeChunk` grava. Se
+  // gravasse aqui, abrir um clipe curto uma única vez apagaria para sempre a
+  // duração que o usuário usa nos vídeos longos.
+  window.clip.getPrefs().then((p) =>
+    setChunk(Math.min(Math.max(p.chunkDuration, 1), Math.max(video.duration, 1))),
+  )
+}, [video.duration])
 
 const changeChunk = (value: number): void => {
   setChunk(value)
