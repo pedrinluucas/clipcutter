@@ -485,6 +485,12 @@ describe('addPoint', () => {
     expect(addPoint(pts(10), 10.05, 100, 'novo')).toHaveLength(2)
   })
 
+  it('aceita ponto a exatamente MIN_GAP mesmo com erro de ponto flutuante', () => {
+    // 59.05 - 59 dá 0.04999999999999716 em ponto flutuante cru. O caso 10.05
+    // acima cai do lado seguro por acaso e não protege contra isso.
+    expect(addPoint(pts(59), 59.05, 100, 'novo')).toHaveLength(2)
+  })
+
   it('limita o ponto às bordas do vídeo', () => {
     expect(addPoint([], 999, 100, 'novo')[0].time).toBe(99.95)
     expect(addPoint([], 0, 100, 'novo')[0].time).toBe(0.05)
@@ -507,6 +513,12 @@ describe('movePoint', () => {
 
   it('limita às bordas do vídeo', () => {
     expect(movePoint(pts(10), 'id1', 999, 100)[0].time).toBe(99.95)
+  })
+
+  it('não colapsa vizinho a exatamente MIN_GAP com erro de ponto flutuante', () => {
+    const result = movePoint(pts(59, 80), 'id2', 59.05, 100)
+    expect(result).toHaveLength(2)
+    expect(result.map((p) => p.time)).toEqual([59, 59.05])
   })
 
   it('ignora id inexistente', () => {
@@ -569,6 +581,13 @@ export const MIN_GAP = 0.05
 
 const round3 = (n: number): number => Math.round(n * 1000) / 1000
 
+// A diferença é arredondada ANTES de comparar. Sem isso, `59.05 - 59` dá
+// 0.04999999999999716 em ponto flutuante e um ponto exatamente a MIN_GAP de
+// distância seria rejeitado por engano — em 48% dos valores de uma varredura
+// de 0 a 1000s, incluindo 59 e 88.5, que é o que gerar cortes a cada 29.5s
+// produz.
+const tooClose = (a: number, b: number): boolean => round3(Math.abs(a - b)) < MIN_GAP
+
 export function clampTime(time: number, duration: number): number {
   const lo = MIN_GAP
   const hi = round3(duration - MIN_GAP)
@@ -602,7 +621,7 @@ export function addPoint(
   id: string,
 ): CutPoint[] {
   const target = clampTime(time, duration)
-  if (points.some((p) => Math.abs(p.time - target) < MIN_GAP)) return points
+  if (points.some((p) => tooClose(p.time, target))) return points
   return [...points, { id, time: target }].sort(byTime)
 }
 
@@ -615,7 +634,7 @@ export function movePoint(
   if (!points.some((p) => p.id === id)) return points
   const target = clampTime(time, duration)
   return points
-    .filter((p) => p.id === id || Math.abs(p.time - target) >= MIN_GAP)
+    .filter((p) => p.id === id || !tooClose(p.time, target))
     .map((p) => (p.id === id ? { ...p, time: target } : p))
     .sort(byTime)
 }
@@ -639,7 +658,7 @@ export function segmentsFrom(points: CutPoint[], duration: number): Segment[] {
 - [ ] **Step 4: Rodar o teste para confirmar que passa**
 
 Run: `npm test -- cutPoints`
-Expected: PASS — 22 testes
+Expected: PASS — 27 testes
 
 - [ ] **Step 5: Commit**
 
