@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { JobProgress, JobResult, Segment, VideoInfo } from '@shared/types'
 import { outputExtension } from '@shared/naming'
 
@@ -8,6 +8,7 @@ export function useExport(video: VideoInfo, segments: Segment[]) {
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<JobProgress | null>(null)
   const [result, setResult] = useState<JobResult | null>(null)
+  const emAndamento = useRef(false)
 
   useEffect(() => {
     window.clip.getPrefs().then((p) => {
@@ -31,7 +32,15 @@ export function useExport(video: VideoInfo, segments: Segment[]) {
   }, [])
 
   const start = useCallback(async () => {
-    if (!outputDir) return
+    // Guarda SÍNCRONA. Usar o estado `running` não fecharia a corrida: estado só
+    // atualiza no próximo render, então dois eventos no mesmo tique leriam `false`
+    // nos dois. O ref muda na hora.
+    //
+    // Isto não compete com a guarda do processo principal: aquela é a autoridade
+    // sobre "existe job rodando"; esta só impede o hook de se invocar duas vezes e
+    // deixar a recusa rápida do main sobrescrever o estado do job verdadeiro.
+    if (!outputDir || emAndamento.current) return
+    emAndamento.current = true
     setRunning(true)
     setResult(null)
     setProgress(null)
@@ -56,6 +65,7 @@ export function useExport(video: VideoInfo, segments: Segment[]) {
         failedIndex: 0,
       })
     } finally {
+      emAndamento.current = false
       setRunning(false)
     }
   }, [outputDir, exactMode, segments, video])
