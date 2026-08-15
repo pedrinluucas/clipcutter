@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+@theme {
+  --color-base: #0f0f1a;
+  --color-panel: #1a1a2e;
+  --color-card: #252547;
+  --color-accent: #4361ee;
+  --color-ok: #06d6a0;
+  --color-marker: #ff6b35;
+  --color-bad: #ef476f;
+}
+
+html, body, #root { height: 100%; }
+body { background: var(--color-base); color: #e7e7f0; font-family: Inter, system-ui, sans-serif; }
