@@ -2227,6 +2227,16 @@ describe('formatSize', () => {
   it('trata zero', () => {
     expect(formatSize(0)).toBe('0 B')
   })
+
+  it('promove a unidade quando o arredondamento chegaria a 1024', () => {
+    // 1048575 bytes dá 1023.999 KB: a comparação crua não promove, mas o
+    // toFixed(1) exibiria "1024.0 KB".
+    expect(formatSize(1048575)).toBe('1.0 MB')
+  })
+
+  it('promove na fronteira de GB pelo mesmo motivo', () => {
+    expect(formatSize(1073741823)).toBe('1.0 GB')
+  })
 })
 ```
 
@@ -2248,7 +2258,10 @@ export function formatSize(bytes: number): string {
   const units = ['KB', 'MB', 'GB', 'TB']
   let value = bytes / 1024
   let unit = 0
-  while (value >= 1024 && unit < units.length - 1) {
+  // Compara o valor JÁ arredondado. Com a comparação crua, 1048575 bytes dá
+  // 1023.999 KB — não promove pra MB — e o `toFixed(1)` exibe "1024.0 KB", que é
+  // uma unidade que não existe. Mesmo defeito em toda fronteira.
+  while (Number(value.toFixed(1)) >= 1024 && unit < units.length - 1) {
     value /= 1024
     unit++
   }
@@ -2259,7 +2272,7 @@ export function formatSize(bytes: number): string {
 - [ ] **Step 4: Rodar o teste para confirmar que passa**
 
 Run: `npm test -- formatSize`
-Expected: PASS — 4 testes
+Expected: PASS — 6 testes
 
 - [ ] **Step 5: Criar a tela de FFmpeg ausente**
 
@@ -2308,7 +2321,12 @@ export function WelcomeScreen({ onPick, onDropFile, error }: Props): React.JSX.E
           e.preventDefault()
           setOver(true)
         }}
-        onDragLeave={() => setOver(false)}
+        onDragLeave={(e) => {
+          // `dragleave` também dispara ao entrar num FILHO da zona (ícone,
+          // textos). Sem esta guarda a borda azul pisca com o cursor ainda
+          // dentro. `contains(null)` é false, então sair da janela ainda limpa.
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(false)
+        }}
         onDrop={(e) => {
           e.preventDefault()
           setOver(false)
