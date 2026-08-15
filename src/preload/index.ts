@@ -1,22 +1,39 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import type {
+  ExportRequest, FfmpegCheck, JobProgress, JobResult, Prefs, VideoInfo,
+} from '../shared/types'
 
-// Custom APIs for renderer
-const api = {}
+const api = {
+  checkFfmpeg: (): Promise<FfmpegCheck> => ipcRenderer.invoke('app:checkFfmpeg'),
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
-if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('api', api)
-  } catch (error) {
-    console.error(error)
-  }
-} else {
-  // @ts-ignore (define in dts)
-  window.electron = electronAPI
-  // @ts-ignore (define in dts)
-  window.api = api
+  openVideoDialog: (): Promise<VideoInfo | null> => ipcRenderer.invoke('video:openDialog'),
+
+  probeVideo: (path: string): Promise<VideoInfo> => ipcRenderer.invoke('video:probe', path),
+
+  chooseOutputDir: (): Promise<string | null> => ipcRenderer.invoke('export:chooseDir'),
+
+  startExport: (request: ExportRequest): Promise<JobResult> =>
+    ipcRenderer.invoke('export:start', request),
+
+  cancelExport: (): void => ipcRenderer.send('export:cancel'),
+
+  onExportProgress: (handler: (progress: JobProgress) => void): (() => void) => {
+    const listener = (_event: unknown, progress: JobProgress): void => handler(progress)
+    ipcRenderer.on('export:progress', listener)
+    return () => ipcRenderer.off('export:progress', listener)
+  },
+
+  openFolder: (path: string): Promise<void> => ipcRenderer.invoke('shell:openFolder', path),
+
+  getPrefs: (): Promise<Prefs> => ipcRenderer.invoke('prefs:get'),
+
+  setPrefs: (patch: Partial<Prefs>): Promise<Prefs> => ipcRenderer.invoke('prefs:set', patch),
+
+  fileUrl: (path: string): string => `clip://local/?p=${encodeURIComponent(path)}`,
 }
+
+export type ClipApi = typeof api
+
+contextBridge.exposeInMainWorld('electron', electronAPI)
+contextBridge.exposeInMainWorld('clip', api)
