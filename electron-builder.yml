@@ -1,5 +1,5 @@
 appId: com.electron.app
-productName: tmp-scaffold
+productName: ClipCutter
 directories:
   buildResources: build
 files:
