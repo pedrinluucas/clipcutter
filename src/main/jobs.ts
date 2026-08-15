@@ -77,7 +77,15 @@ export function startExportJob(
         await handle.promise
         done.push(outputPath)
       } catch (error) {
-        rmSync(outputPath, { force: true })
+        try {
+          rmSync(outputPath, { force: true })
+        } catch (rmError) {
+          // `force: true` só perdoa ENOENT. EBUSY/EPERM acontece no Windows quando
+          // antivírus ou indexação ainda seguram o arquivo recém-escrito. Não pode
+          // escapar: a promise atravessa o IPC e uma rejeição travaria a UI em
+          // "exportando". Sobrar um arquivo parcial em disco é o mal menor.
+          console.error('Não consegui apagar o arquivo parcial:', outputPath, rmError)
+        }
         if (error instanceof FfmpegCancelled || cancelled) {
           return { status: 'cancelled', files: done }
         }
