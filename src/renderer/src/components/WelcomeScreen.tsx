@@ -18,7 +18,11 @@ export function WelcomeScreen({ onPick, onDropFile, error }: Props): React.JSX.E
           e.preventDefault()
           setOver(true)
         }}
-        onDragLeave={() => setOver(false)}
+        onDragLeave={(e) => {
+          // `dragleave` também dispara ao entrar num filho da zona (ícone, textos).
+          // Sem esta guarda a borda azul pisca enquanto o cursor ainda está dentro.
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(false)
+        }}
         onDrop={(e) => {
           e.preventDefault()
           setOver(false)

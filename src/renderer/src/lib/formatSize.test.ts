@@ -17,4 +17,14 @@ describe('formatSize', () => {
   it('trata zero', () => {
     expect(formatSize(0)).toBe('0 B')
   })
+
+  it('promove a unidade quando o arredondamento chegaria a 1024', () => {
+    // 1048575 bytes dá 1023.999 KB: não promove pela comparação crua, mas
+    // toFixed(1) exibiria "1024.0 KB".
+    expect(formatSize(1048575)).toBe('1.0 MB')
+  })
+
+  it('promove na fronteira de GB pelo mesmo motivo', () => {
+    expect(formatSize(1073741823)).toBe('1.0 GB')
+  })
 })
