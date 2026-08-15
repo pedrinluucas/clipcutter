@@ -1,18 +1,29 @@
 import { useEffect, useState } from 'react'
-import type { CutPoint, FfmpegCheck, VideoInfo } from '@shared/types'
-import { movePoint, removePoint } from '@shared/cutPoints'
+import type { FfmpegCheck, VideoInfo } from '@shared/types'
 import { WelcomeScreen } from './components/WelcomeScreen'
 import { FileInfo } from './components/FileInfo'
 import { FfmpegMissing } from './components/FfmpegMissing'
 import { usePlayer } from './hooks/usePlayer'
+import { useCutPoints } from './hooks/useCutPoints'
 import { VideoPlayer } from './components/VideoPlayer'
 import { PlayerControls } from './components/PlayerControls'
 import { Timeline } from './components/Timeline'
+import { CutPanel } from './components/CutPanel'
 
 // Componente separado para que os hooks do player só rodem quando já existe vídeo carregado.
 function Editor({ video }: { video: VideoInfo }): React.JSX.Element {
   const player = usePlayer(video)
-  const [points, setPoints] = useState<CutPoint[]>([])
+  const cuts = useCutPoints(video.duration)
+  const [chunk, setChunk] = useState(30)
+
+  useEffect(() => {
+    window.clip.getPrefs().then((p) => setChunk(p.chunkDuration))
+  }, [])
+
+  const changeChunk = (value: number): void => {
+    setChunk(value)
+    void window.clip.setPrefs({ chunkDuration: value })
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -28,6 +39,7 @@ function Editor({ video }: { video: VideoInfo }): React.JSX.Element {
         l: () => player.nudge(10),
         ',': () => player.stepFrame(-1),
         '.': () => player.stepFrame(1),
+        s: () => cuts.addAt(player.currentTime),
       }
 
       const action = actions[e.key.toLowerCase()] ?? actions[e.key]
@@ -37,7 +49,7 @@ function Editor({ video }: { video: VideoInfo }): React.JSX.Element {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [player])
+  }, [player, cuts])
 
   return (
     <div className="grid h-full grid-cols-[1fr_320px] gap-4 p-4">
@@ -46,11 +58,18 @@ function Editor({ video }: { video: VideoInfo }): React.JSX.Element {
         <PlayerControls video={video} player={player} />
         <Timeline
           video={video}
-          points={points}
+          points={cuts.points}
           currentTime={player.currentTime}
           onSeek={player.seek}
-          onMovePoint={(id, time) => setPoints((p) => movePoint(p, id, time, video.duration))}
-          onRemovePoint={(id) => setPoints((p) => removePoint(p, id))}
+          onMovePoint={cuts.move}
+          onRemovePoint={cuts.remove}
+        />
+        <CutPanel
+          video={video}
+          cuts={cuts}
+          chunk={chunk}
+          onChunkChange={changeChunk}
+          currentTime={player.currentTime}
         />
       </div>
       <FileInfo video={video} />
