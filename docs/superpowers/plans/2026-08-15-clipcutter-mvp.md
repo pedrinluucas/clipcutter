@@ -1154,6 +1154,44 @@ describe('parseProbeOutput', () => {
     const semBitrate = { ...sample, format: { duration: '10', size: '100' } }
     expect(parseProbeOutput(semBitrate, 'C:\\v\\a.mp4').bitrate).toBeNull()
   })
+
+  it('ignora capa embutida e usa o fluxo de vídeo real', () => {
+    const comCapa = {
+      ...sample,
+      streams: [
+        {
+          codec_type: 'video',
+          codec_name: 'mjpeg',
+          width: 300,
+          height: 169,
+          r_frame_rate: '90000/1',
+          disposition: { attached_pic: 1 },
+        },
+        ...sample.streams,
+      ],
+    }
+    const info = parseProbeOutput(comCapa, 'C:\\videos\\baixado.mp4')
+    expect(info.videoCodec).toBe('h264')
+    expect(info.width).toBe(1920)
+    expect(info.fps).toBe(29.97)
+  })
+
+  it('recusa arquivo cujo único fluxo de vídeo é capa embutida', () => {
+    const soCapa = {
+      ...sample,
+      streams: [
+        {
+          codec_type: 'video',
+          codec_name: 'png',
+          width: 300,
+          height: 300,
+          disposition: { attached_pic: 1 },
+        },
+        sample.streams[1],
+      ],
+    }
+    expect(() => parseProbeOutput(soCapa, 'C:\\musica\\faixa.mp3')).toThrow(/faixa de vídeo/)
+  })
 })
 ```
 
@@ -1221,6 +1259,7 @@ type ProbeStream = {
   width?: number
   height?: number
   r_frame_rate?: string
+  disposition?: { attached_pic?: number }
 }
 
 type ProbeOutput = {
@@ -1240,7 +1279,14 @@ export function parseProbeOutput(raw: unknown, filePath: string): VideoInfo {
   const data = raw as ProbeOutput
   const streams = data.streams ?? []
 
-  const video = streams.find((s) => s.codec_type === 'video')
+  // `attached_pic` é capa embutida — o ffprobe reporta como fluxo de vídeo, e a
+  // ordem depende do muxer. Sem esse filtro, um arquivo de `yt-dlp
+  // --embed-thumbnail` faria a ficha mostrar a resolução e o FPS da miniatura.
+  // Sem fallback de propósito: se o único fluxo de vídeo for capa (MP3 com capa),
+  // o arquivo realmente não tem vídeo e deve ser recusado.
+  const video = streams.find(
+    (s) => s.codec_type === 'video' && s.disposition?.attached_pic !== 1,
+  )
   if (!video) throw new Error('O arquivo não tem faixa de vídeo.')
 
   const audio = streams.find((s) => s.codec_type === 'audio')
@@ -1301,8 +1347,8 @@ describe('locateBinaries (integração — exige ffmpeg instalado)', () => {
 - [ ] **Step 6: Rodar todos os testes**
 
 Run: `npm test`
-Expected: PASS — todos, incluindo os 9 de `probe` e o de integração do `locate`
-(suíte total: 75)
+Expected: PASS — todos, incluindo os 11 de `probe` e o de integração do `locate`
+(suíte total: 77)
 
 - [ ] **Step 7: Commit**
 
