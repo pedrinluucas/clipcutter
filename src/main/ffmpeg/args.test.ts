@@ -9,6 +9,16 @@ describe('buildCutArgs', () => {
     expect(args.indexOf('-ss')).toBeLessThan(args.indexOf('-i'))
   })
 
+  it('coloca -t DEPOIS de -i (limita a duração da SAÍDA, não da leitura)', () => {
+    // -t antes de -i muda de significado: vira limite de leitura do arquivo de
+    // ENTRADA, não duração do que é escrito na saída. Silencioso — o ffmpeg não
+    // recusa o comando, só corta errado.
+    for (const mode of ['fast', 'exact'] as const) {
+      const args = buildCutArgs({ ...base, mode })
+      expect(args.indexOf('-t')).toBeGreaterThan(args.indexOf('-i'))
+    }
+  })
+
   it('formata os tempos com 3 casas decimais', () => {
     const args = buildCutArgs({ ...base, mode: 'fast' })
     expect(args[args.indexOf('-ss') + 1]).toBe('29.500')
