@@ -1,3 +1,4 @@
+import { RefreshCw } from 'lucide-react'
 import type { VideoInfo } from '@shared/types'
 import { formatTime } from '@shared/time'
 import { formatSize } from '../lib/formatSize'
@@ -9,7 +10,9 @@ const Row = ({ label, value }: { label: string; value: string }): React.JSX.Elem
   </div>
 )
 
-export function FileInfo({ video }: { video: VideoInfo }): React.JSX.Element {
+type Props = { video: VideoInfo; onReset: () => void }
+
+export function FileInfo({ video, onReset }: Props): React.JSX.Element {
   return (
     <div className="rounded-lg bg-[#1a1a2e] p-4">
       <p className="mb-3 truncate font-medium" title={video.fileName}>
@@ -24,6 +27,13 @@ export function FileInfo({ video }: { video: VideoInfo }): React.JSX.Element {
       {video.bitrate !== null && (
         <Row label="Bitrate" value={`${Math.round(video.bitrate / 1000)} kbps`} />
       )}
+
+      <button
+        onClick={onReset}
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded bg-[#252547] px-3 py-2 text-sm transition-colors duration-150 hover:bg-[#252547]/70"
+      >
+        <RefreshCw size={16} /> Trocar vídeo
+      </button>
     </div>
   )
 }

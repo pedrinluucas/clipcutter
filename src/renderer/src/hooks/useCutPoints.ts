@@ -2,9 +2,9 @@ import { useCallback, useMemo, useState } from 'react'
 import type { CutPoint } from '@shared/types'
 import {
   addPoint,
-  generateTimesByDuration,
+  dragPoint,
+  generatePoints,
   movePoint,
-  pointsFromTimes,
   removePoint,
   segmentsFrom,
 } from '@shared/cutPoints'
@@ -17,12 +17,20 @@ export function useCutPoints(duration: number) {
   const segments = useMemo(() => segmentsFrom(points, duration), [points, duration])
 
   const generate = useCallback(
-    (chunk: number) => setPoints(pointsFromTimes(generateTimesByDuration(chunk, duration), makeId)),
+    (chunk: number) => setPoints((p) => generatePoints(chunk, duration, p, makeId)),
     [duration],
   )
 
   const addAt = useCallback(
     (time: number) => setPoints((p) => addPoint(p, time, duration, makeId())),
+    [duration],
+  )
+
+  // Chamado a cada evento de ponteiro durante o arrasto: reposiciona sem colapsar
+  // nem reordenar (ver comentário do `dragPoint`). `move` continua sendo o gesto
+  // CONCLUÍDO — chamado uma vez, no pointerup — que reordena e colapsa de verdade.
+  const drag = useCallback(
+    (id: string, time: number) => setPoints((p) => dragPoint(p, id, time, duration)),
     [duration],
   )
 
@@ -35,7 +43,7 @@ export function useCutPoints(duration: number) {
 
   const clear = useCallback(() => setPoints([]), [])
 
-  return { points, segments, generate, addAt, move, remove, clear }
+  return { points, segments, generate, addAt, drag, move, remove, clear }
 }
 
 export type CutPointsState = ReturnType<typeof useCutPoints>

@@ -30,6 +30,21 @@ export function pointsFromTimes(times: number[], makeId: () => string): CutPoint
   return times.map((time) => ({ id: makeId(), time }))
 }
 
+// Gerar zero pontos é um resultado legítimo por si só (spec §5 abençoa "uma parte
+// só"). O que não é legítimo é usar isso pra apagar em silêncio marcadores que o
+// usuário já colocou na mão: se o cálculo por duração não produz nada E já existem
+// pontos, mantém a lista atual em vez de substituir por vazio.
+export function generatePoints(
+  chunk: number,
+  duration: number,
+  previous: CutPoint[],
+  makeId: () => string,
+): CutPoint[] {
+  const next = pointsFromTimes(generateTimesByDuration(chunk, duration), makeId)
+  if (next.length === 0 && previous.length > 0) return previous
+  return next
+}
+
 const byTime = (a: CutPoint, b: CutPoint): number => a.time - b.time
 
 export function addPoint(
@@ -59,6 +74,34 @@ export function movePoint(
 
 export function removePoint(points: CutPoint[], id: string): CutPoint[] {
   return points.filter((p) => p.id !== id)
+}
+
+// Reposiciona SEM colapsar e SEM reordenar — usado quadro a quadro durante um
+// arrasto. `movePoint` colapsa qualquer ponto a menos de MIN_GAP do alvo, o que é
+// certo para o gesto CONCLUÍDO (soltar em cima de outro deve fundir os dois), mas
+// destrutivo demais para cada evento de ponteiro no caminho: numa faixa de 10s a
+// zona de colapso tem ~9px, e arrastar um marcador cruzando três outros apagaria
+// os três sem aviso. Por isso o ponto fica travado a MIN_GAP do vizinho mais
+// próximo em vez de engolir a lista inteira — o valor bruto do ponteiro (sem esse
+// travamento) continua disponível pra quem quiser aplicar o `movePoint` de verdade
+// ao soltar o botão.
+export function dragPoint(
+  points: CutPoint[],
+  id: string,
+  time: number,
+  duration: number,
+): CutPoint[] {
+  const index = points.findIndex((p) => p.id === id)
+  if (index === -1) return points
+
+  const prev = index > 0 ? points[index - 1] : undefined
+  const next = index < points.length - 1 ? points[index + 1] : undefined
+  const lo = prev ? round3(prev.time + MIN_GAP) : MIN_GAP
+  const hi = next ? round3(next.time - MIN_GAP) : round3(Math.max(duration - MIN_GAP, lo))
+  const wanted = Number.isFinite(time) ? time : lo
+  const bounded = round3(Math.min(Math.max(wanted, lo), Math.max(lo, hi)))
+
+  return points.map((p) => (p.id === id ? { ...p, time: bounded } : p))
 }
 
 export function segmentsFrom(points: CutPoint[], duration: number): Segment[] {

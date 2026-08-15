@@ -4,8 +4,10 @@ import {
   clampTime,
   generateTimesByDuration,
   pointsFromTimes,
+  generatePoints,
   addPoint,
   movePoint,
+  dragPoint,
   removePoint,
   segmentsFrom,
 } from './cutPoints'
@@ -75,6 +77,33 @@ describe('pointsFromTimes', () => {
   })
 })
 
+describe('generatePoints', () => {
+  it('gera normalmente quando não havia pontos antes', () => {
+    const result = generatePoints(29.5, 100, [], makeIdGen())
+    expect(result.map((p) => p.time)).toEqual([29.5, 59, 88.5])
+  })
+
+  it('substitui a lista quando o resultado novo não é vazio, mesmo com pontos antigos', () => {
+    const previous = pts(10)
+    const result = generatePoints(29.5, 100, previous, makeIdGen())
+    expect(result.map((p) => p.time)).toEqual([29.5, 59, 88.5])
+  })
+
+  it('recusa substituir marcadores existentes por uma lista vazia', () => {
+    // 120s de duração pedida numa timeline de 100s não gera ponto nenhum. Sem a
+    // guarda, isto apagaria em silêncio os marcadores que o usuário já tinha
+    // colocado na mão só porque ele mexeu no campo de duração.
+    const previous = pts(10, 30)
+    const result = generatePoints(120, 100, previous, makeIdGen())
+    expect(result).toBe(previous)
+  })
+
+  it('permite lista vazia quando já não havia pontos — "uma parte só" é resultado legítimo', () => {
+    const result = generatePoints(120, 100, [], makeIdGen())
+    expect(result).toEqual([])
+  })
+})
+
 describe('addPoint', () => {
   it('insere mantendo a ordem', () => {
     const result = addPoint(pts(10, 30), 20, 100, 'novo')
@@ -128,6 +157,48 @@ describe('movePoint', () => {
     const result = movePoint(pts(59, 80), 'id2', 59.05, 100)
     expect(result).toHaveLength(2)
     expect(result.map((p) => p.time)).toEqual([59, 59.05])
+  })
+})
+
+describe('dragPoint', () => {
+  it('move livremente quando há espaço de sobra', () => {
+    const result = dragPoint(pts(10, 30, 50), 'id2', 35, 100)
+    expect(result.find((p) => p.id === 'id2')!.time).toBe(35)
+  })
+
+  it('não deixa cruzar o vizinho da direita, mesmo pedindo além dele', () => {
+    // pts(10, 30, 50): arrastar id1 (10) até 45 tentaria passar por cima de id2 (30).
+    // Sem a trava, isto colapsaria id1 em cima de id2 NO MEIO do gesto.
+    const result = dragPoint(pts(10, 30, 50), 'id1', 45, 100)
+    expect(result.map((p) => p.time)).toEqual([29.95, 30, 50])
+    expect(result.find((p) => p.id === 'id1')!.time).toBe(29.95)
+  })
+
+  it('não deixa cruzar o vizinho da esquerda', () => {
+    const result = dragPoint(pts(10, 30, 50), 'id2', 5, 100)
+    expect(result.find((p) => p.id === 'id2')!.time).toBe(10.05)
+  })
+
+  it('nunca colapsa nem reordena — a lista sai do mesmo tamanho e na mesma ordem', () => {
+    const before = pts(10, 30, 50)
+    const result = dragPoint(before, 'id1', 999, 100)
+    expect(result).toHaveLength(3)
+    expect(result.map((p) => p.id)).toEqual(['id1', 'id2', 'id3'])
+  })
+
+  it('sem vizinho à esquerda, limita à borda inicial do vídeo', () => {
+    const result = dragPoint(pts(30, 50), 'id1', -10, 100)
+    expect(result.find((p) => p.id === 'id1')!.time).toBe(MIN_GAP)
+  })
+
+  it('sem vizinho à direita, limita à borda final do vídeo', () => {
+    const result = dragPoint(pts(30, 50), 'id2', 999, 100)
+    expect(result.find((p) => p.id === 'id2')!.time).toBe(99.95)
+  })
+
+  it('ignora id inexistente', () => {
+    const before = pts(10, 30)
+    expect(dragPoint(before, 'fantasma', 50, 100)).toBe(before)
   })
 })
 

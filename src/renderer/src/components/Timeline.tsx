@@ -7,6 +7,7 @@ type Props = {
   points: CutPoint[]
   currentTime: number
   onSeek: (time: number) => void
+  onDragPoint: (id: string, time: number) => void
   onMovePoint: (id: string, time: number) => void
   onRemovePoint: (id: string) => void
 }
@@ -24,6 +25,7 @@ export function Timeline({
   points,
   currentTime,
   onSeek,
+  onDragPoint,
   onMovePoint,
   onRemovePoint,
 }: Props): React.JSX.Element {
@@ -48,9 +50,18 @@ export function Timeline({
     <div
       className="select-none rounded-lg bg-[#1a1a2e] p-4"
       onPointerMove={(e) => {
-        if (dragging) onMovePoint(dragging, timeFromEvent(e.clientX))
+        // Só reposiciona (sem colapsar) enquanto o gesto está em andamento. O
+        // valor bruto do ponteiro é o que importa aqui — ele pode estar "além" de
+        // um vizinho; quem trava a posição exibida é o `dragPoint` em si.
+        if (dragging) onDragPoint(dragging, timeFromEvent(e.clientX))
       }}
-      onPointerUp={() => setDragging(null)}
+      onPointerUp={(e) => {
+        // Aplica o gesto CONCLUÍDO com o alvo bruto do ponteiro, não com a posição
+        // travada que estava sendo exibida — é isto que permite colapsar de
+        // verdade quando o usuário solta em cima de outro marcador de propósito.
+        if (dragging) onMovePoint(dragging, timeFromEvent(e.clientX))
+        setDragging(null)
+      }}
       onPointerLeave={() => setDragging(null)}
       onPointerCancel={() => setDragging(null)}
     >
@@ -65,6 +76,8 @@ export function Timeline({
       <div
         ref={trackRef}
         onPointerDown={(e) => {
+          // Botão direito na faixa não deve navegar — só o clique esquerdo seeka.
+          if (e.button !== 0) return
           if (e.target === e.currentTarget) onSeek(timeFromEvent(e.clientX))
         }}
         className="relative h-16 cursor-pointer rounded bg-[#252547]"

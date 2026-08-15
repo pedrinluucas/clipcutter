@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FfmpegCheck, VideoInfo } from '@shared/types'
 import { WelcomeScreen } from './components/WelcomeScreen'
 import { FileInfo } from './components/FileInfo'
@@ -13,11 +13,12 @@ import { CutPanel } from './components/CutPanel'
 import { ExportBar } from './components/ExportBar'
 
 // Componente separado para que os hooks do player só rodem quando já existe vídeo carregado.
-function Editor({ video }: { video: VideoInfo }): React.JSX.Element {
+function Editor({ video, onReset }: { video: VideoInfo; onReset: () => void }): React.JSX.Element {
   const player = usePlayer(video)
   const cuts = useCutPoints(video.duration)
   const exp = useExport(video, cuts.segments)
   const [chunk, setChunk] = useState(30)
+  const saveChunkTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     window.clip.getPrefs().then((p) =>
@@ -29,9 +30,34 @@ function Editor({ video }: { video: VideoInfo }): React.JSX.Element {
     )
   }, [video.duration])
 
+  // Some ao desmontar (troca de vídeo) para não gravar preferência de uma sessão
+  // que já não existe mais.
+  useEffect(() => {
+    return () => {
+      if (saveChunkTimer.current) clearTimeout(saveChunkTimer.current)
+    }
+  }, [])
+
   const changeChunk = (value: number): void => {
-    setChunk(value)
-    void window.clip.setPrefs({ chunkDuration: value })
+    // `Number('')` é 0, `Number('-')` é NaN. Sem esta guarda, esvaziar o campo ou
+    // digitar um sinal solto grava um `chunkDuration` inválido — e como `min`/`max`
+    // do <input type="number"> não travam o que foi DIGITADO (só o que o
+    // clique-arrasto das setinhas produz), um valor acima da duração do vídeo
+    // também passaria direto. Os dois casos fazem `generateTimesByDuration`
+    // devolver `[]`, e sem a guarda irmã em `useCutPoints.generate` isso apagaria
+    // os marcadores manuais em silêncio.
+    if (!Number.isFinite(value)) return
+    const clamped = Math.min(Math.max(value, 1), Math.max(video.duration, 1))
+    setChunk(clamped)
+
+    // Debounce: o slider dispara `onChange` a cada pixel arrastado, e gravar no
+    // disco (electron-store) em cada tique é síncrono e caro — num vídeo de 1h,
+    // milhares de escritas por arrasto. O valor exibido (`chunk`) atualiza na
+    // hora; só a persistência espera o usuário parar de mexer.
+    if (saveChunkTimer.current) clearTimeout(saveChunkTimer.current)
+    saveChunkTimer.current = setTimeout(() => {
+      void window.clip.setPrefs({ chunkDuration: clamped })
+    }, 300)
   }
 
   useEffect(() => {
@@ -70,6 +96,7 @@ function Editor({ video }: { video: VideoInfo }): React.JSX.Element {
           points={cuts.points}
           currentTime={player.currentTime}
           onSeek={player.seek}
+          onDragPoint={cuts.drag}
           onMovePoint={cuts.move}
           onRemovePoint={cuts.remove}
         />
@@ -82,7 +109,7 @@ function Editor({ video }: { video: VideoInfo }): React.JSX.Element {
         />
         <ExportBar exp={exp} partCount={cuts.segments.length} />
       </div>
-      <FileInfo video={video} />
+      <FileInfo video={video} onReset={onReset} />
     </div>
   )
 }
@@ -119,5 +146,16 @@ export default function App(): React.JSX.Element {
     )
   }
 
-  return <Editor video={video} />
+  return (
+    <Editor
+      video={video}
+      onReset={() => {
+        // Desmontar o Editor (via video === null) é o reset certo: limpa pontos de
+        // corte, estado do player e estado de exportação juntos, de uma vez —
+        // tentar zerar cada hook individualmente arriscaria esquecer um.
+        setVideo(null)
+        setError(null)
+      }}
+    />
+  )
 }
