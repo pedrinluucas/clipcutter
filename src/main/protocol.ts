@@ -1,7 +1,8 @@
 import { protocol, net } from 'electron'
 import { pathToFileURL } from 'node:url'
+import { CLIP_SCHEME, toClipUrl } from '../shared/clipUrl'
 
-export const CLIP_SCHEME = 'clip'
+export { CLIP_SCHEME, toClipUrl }
 
 // Precisa rodar ANTES de app.whenReady()
 export function registerClipScheme(): void {
@@ -20,8 +21,4 @@ export function handleClipProtocol(): void {
     if (!filePath) return new Response('caminho ausente', { status: 400 })
     return net.fetch(pathToFileURL(filePath).toString())
   })
-}
-
-export function toClipUrl(filePath: string): string {
-  return `${CLIP_SCHEME}://local/?p=${encodeURIComponent(filePath)}`
 }

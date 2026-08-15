@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { toClipUrl } from './protocol'
+// `toClipUrl` mora em src/shared/clipUrl.ts — este arquivo de teste cobre a
+// mesma string que de fato chega ao player (preload/index.ts importa daqui, não
+// de uma cópia local). Testar uma função duplicada e morta em `protocol.ts` era
+// exatamente a lacuna por trás do defeito crítico da falta de `media-src` no CSP:
+// o teste passava e o player continuava preto.
+import { toClipUrl } from '../shared/clipUrl'
 
 describe('toClipUrl', () => {
   it('codifica um caminho do Windows', () => {

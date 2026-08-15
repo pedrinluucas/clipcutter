@@ -3,6 +3,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type {
   ExportRequest, FfmpegCheck, JobProgress, JobResult, Prefs, VideoInfo,
 } from '../shared/types'
+import { toClipUrl } from '../shared/clipUrl'
 
 const api = {
   checkFfmpeg: (): Promise<FfmpegCheck> => ipcRenderer.invoke('app:checkFfmpeg'),
@@ -30,7 +31,7 @@ const api = {
 
   setPrefs: (patch: Partial<Prefs>): Promise<Prefs> => ipcRenderer.invoke('prefs:set', patch),
 
-  fileUrl: (path: string): string => `clip://local/?p=${encodeURIComponent(path)}`,
+  fileUrl: (path: string): string => toClipUrl(path),
 }
 
 export type ClipApi = typeof api
