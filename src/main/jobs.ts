@@ -2,7 +2,7 @@ import { mkdirSync, existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { buildCutArgs } from './ffmpeg/args'
 import { runFfmpeg, FfmpegCancelled, type FfmpegHandle } from './ffmpeg/run'
-import { partFileName, uniqueFileName } from '../shared/naming'
+import { outputExtension, partFileName, uniqueFileName } from '../shared/naming'
 import type { ExportRequest, JobProgress, JobResult } from '../shared/types'
 
 export function startExportJob(
@@ -32,12 +32,16 @@ export function startExportJob(
     }
 
     const total = request.segments.length
+    // Deriva do modo em vez de confiar na extensão que o renderer mandou: assim um
+    // export em modo exato nunca sai gravado sob um nome que não seja `.mp4`, nem
+    // que o pedido chegue com `request.extension` errado ou desatualizado.
+    const extension = outputExtension(request.mode, request.extension)
 
     for (const segment of request.segments) {
       if (cancelled) return { status: 'cancelled', files: done }
 
       const fileName = uniqueFileName(
-        partFileName(request.baseName, segment.index, total, request.extension),
+        partFileName(request.baseName, segment.index, total, extension),
         (name) => existsSync(join(request.outputDir, name)),
       )
       const outputPath = join(request.outputDir, fileName)
