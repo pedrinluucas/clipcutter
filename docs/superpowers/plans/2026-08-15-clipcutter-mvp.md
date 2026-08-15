@@ -2810,6 +2810,7 @@ export function Timeline({
       }}
       onPointerUp={() => setDragging(null)}
       onPointerLeave={() => setDragging(null)}
+      onPointerCancel={() => setDragging(null)}
     >
       <div className="relative mb-1 h-4 font-mono text-[10px] text-[#e7e7f0]/40">
         {ticks.map((t) => (
@@ -2840,6 +2841,15 @@ export function Timeline({
             style={{ left: percent(point.time) }}
             onPointerDown={(e) => {
               e.stopPropagation()
+              // Captura o ponteiro. Sem isto, arrastar o marcador para além da
+              // borda do contêiner dispara `pointerleave` e o marcador congela no
+              // meio do gesto, sem pista visual de que a interação acabou. E como
+              // o `movePoint` limita a [0.05, duração-0.05], arrastar até a borda
+              // é o uso NORMAL, não o caso extremo.
+              // Os eventos continuam chegando aos handlers do contêiner: a captura
+              // redireciona para o marcador, que é descendente dele, então a bolha
+              // segue a árvore normalmente.
+              e.currentTarget.setPointerCapture(e.pointerId)
               setDragging(point.id)
             }}
             onContextMenu={(e) => {
