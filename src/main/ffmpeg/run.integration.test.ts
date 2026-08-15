@@ -12,6 +12,20 @@ let dir = ''
 let source = ''
 let heavy = ''
 
+// Devolve a duração do arquivo, ou null se o ffprobe não conseguir lê-lo.
+const duracaoOuNull = async (file: string): Promise<number | null> => {
+  try {
+    const { stdout } = await run('ffprobe', [
+      '-v', 'error', '-show_entries', 'format=duration',
+      '-print_format', 'default=nw=1:nk=1', file,
+    ])
+    const valor = Number(stdout.trim())
+    return Number.isFinite(valor) ? valor : null
+  } catch {
+    return null
+  }
+}
+
 beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), 'clipcutter-'))
   source = join(dir, 'fonte.mp4')
@@ -58,7 +72,7 @@ describe('runFfmpeg (integração — exige ffmpeg instalado)', () => {
     await expect(handle.promise).rejects.toThrow()
   })
 
-  it('cancela e rejeita com FfmpegCancelled', async () => {
+  it('cancela, mata o processo e deixa o arquivo incompleto', async () => {
     const output = join(dir, 'cancelado.mp4')
     const handle = runFfmpeg(
       'ffmpeg',
@@ -69,9 +83,13 @@ describe('runFfmpeg (integração — exige ffmpeg instalado)', () => {
     setTimeout(() => handle.cancel(), 150)
     await expect(handle.promise).rejects.toBeInstanceOf(FfmpegCancelled)
 
-    // Se o taskkill não matasse nada, o ffmpeg terminaria o encode natural (vários
-    // segundos) e o close ainda rejeitaria como cancelado — o teste passaria sem
-    // provar nada. O tempo decorrido é o que prova que o processo morreu cedo.
-    expect(Date.now() - iniciou).toBeLessThan(3000)
+    // Prova categórica de que o processo morreu no meio: se o taskkill falhasse, o
+    // ffmpeg terminaria o encode e o arquivo teria os 30s completos e legíveis.
+    // Truncado, o `-movflags +faststart` deixa o arquivo sem índice, ilegível.
+    const duracao = await duracaoOuNull(output)
+    expect(duracao === null || duracao < 5).toBe(true)
+
+    // Limite frouxo, só para detectar travamento — não é a prova do cancelamento.
+    expect(Date.now() - iniciou).toBeLessThan(10_000)
   })
 })
