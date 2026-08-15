@@ -17,8 +17,14 @@ function Editor({ video }: { video: VideoInfo }): React.JSX.Element {
   const [chunk, setChunk] = useState(30)
 
   useEffect(() => {
-    window.clip.getPrefs().then((p) => setChunk(p.chunkDuration))
-  }, [])
+    window.clip.getPrefs().then((p) =>
+      // A duração vem da sessão anterior e pode ser maior que este vídeo. Sem o
+      // limite, o slider trava no máximo e o campo numérico não — os dois passam a
+      // discordar na tela — e "Gerar cortes" gera zero pontos, substituindo por
+      // vazio os marcadores que o usuário já tinha colocado na mão.
+      setChunk(Math.min(Math.max(p.chunkDuration, 1), Math.max(video.duration, 1))),
+    )
+  }, [video.duration])
 
   const changeChunk = (value: number): void => {
     setChunk(value)
