@@ -202,7 +202,7 @@ git commit -m "chore: scaffold do projeto com electron-vite, tailwind e vitest"
 - Consumes: nada
 - Produces:
   - `CutPoint`, `Segment`, `VideoInfo`, `CutMode`, `ExportRequest`, `JobProgress`, `JobResult` — usados por todas as tasks seguintes
-  - `formatTime(seconds: number): string` → `"mm:ss.mmm"`
+  - `formatTime(seconds: number): string` → `"mm:ss.mmm"`, virando `"h:mm:ss.mmm"` a partir de 1 hora
   - `parseTime(text: string): number | null`
 
 - [ ] **Step 1: Criar os tipos compartilhados**
@@ -281,8 +281,16 @@ describe('formatTime', () => {
     expect(formatTime(90.5)).toBe('01:30.500')
   })
 
-  it('deixa os minutos passarem de 59 em vez de virar hora', () => {
-    expect(formatTime(3600)).toBe('60:00.000')
+  it('vira pra hh:mm:ss.mmm assim que chega em 1 hora', () => {
+    expect(formatTime(3600)).toBe('1:00:00.000')
+  })
+
+  it('mantém mm:ss.mmm logo abaixo de 1 hora', () => {
+    expect(formatTime(3599.999)).toBe('59:59.999')
+  })
+
+  it('soma minutos e segundos corretamente acima de 1 hora', () => {
+    expect(formatTime(3665.25)).toBe('1:01:05.250')
   })
 
   it('arredonda para o milissegundo mais próximo', () => {
@@ -317,11 +325,21 @@ describe('parseTime', () => {
     expect(parseTime('01:75')).toBeNull()
   })
 
-  it('é a volta de formatTime', () => {
+  it('lê o formato com hora', () => {
+    expect(parseTime('1:00:00.000')).toBe(3600)
+  })
+
+  it('é a volta de formatTime abaixo de 1 hora', () => {
     expect(parseTime(formatTime(123.456))).toBeCloseTo(123.456, 3)
+  })
+
+  it('é a volta de formatTime acima de 1 hora', () => {
+    expect(parseTime(formatTime(3665.25))).toBeCloseTo(3665.25, 3)
   })
 })
 ```
+
+> **Nota da revisão final (fix wave):** o teste original tinha `formatTime(3600) === '60:00.000'` — minutos passando de 59 sem nunca virar hora. Numa gravação de imersão de horas isso rende `"105:00.000"`, ilegível como posição na régua da timeline. Trocado por rollover pra `h:mm:ss.mmm` a partir de 1 hora, com testes de fronteira (`3599.999` continua em `mm:ss.mmm`) e round-trip do `parseTime` nos dois formatos.
 
 - [ ] **Step 3: Rodar o teste para confirmar que falha**
 
@@ -339,24 +357,50 @@ export function formatTime(seconds: number): string {
   const ms = totalMs % 1000
   const totalSec = (totalMs - ms) / 1000
   const sec = totalSec % 60
-  const min = (totalSec - sec) / 60
-  return `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}.${String(ms).padStart(3, '0')}`
+  const totalMin = (totalSec - sec) / 60
+  const min = totalMin % 60
+  const hour = (totalMin - min) / 60
+
+  const msStr = String(ms).padStart(3, '0')
+  const secStr = String(sec).padStart(2, '0')
+
+  // Vale para gravações de várias horas: sem o degrau pra hora, `mm` passa de 59
+  // e vira "105:00.000", que ninguém lê como "1h45min" de cabeça — e a régua da
+  // timeline é a principal referência de navegação nesses vídeos.
+  if (hour > 0) {
+    return `${hour}:${String(min).padStart(2, '0')}:${secStr}.${msStr}`
+  }
+  return `${String(min).padStart(2, '0')}:${secStr}.${msStr}`
 }
 
 export function parseTime(text: string): number | null {
-  const match = /^(\d+):([0-5]\d)(?:\.(\d{1,3}))?$/.exec(text.trim())
-  if (!match) return null
-  const min = Number(match[1])
-  const sec = Number(match[2])
-  const ms = match[3] ? Number(match[3].padEnd(3, '0')) : 0
-  return Math.round((min * 60 + sec + ms / 1000) * 1000) / 1000
+  const trimmed = text.trim()
+
+  const withHour = /^(\d+):([0-5]\d):([0-5]\d)(?:\.(\d{1,3}))?$/.exec(trimmed)
+  if (withHour) {
+    const hour = Number(withHour[1])
+    const min = Number(withHour[2])
+    const sec = Number(withHour[3])
+    const ms = withHour[4] ? Number(withHour[4].padEnd(3, '0')) : 0
+    return Math.round((hour * 3600 + min * 60 + sec + ms / 1000) * 1000) / 1000
+  }
+
+  const noHour = /^(\d+):([0-5]\d)(?:\.(\d{1,3}))?$/.exec(trimmed)
+  if (noHour) {
+    const min = Number(noHour[1])
+    const sec = Number(noHour[2])
+    const ms = noHour[3] ? Number(noHour[3].padEnd(3, '0')) : 0
+    return Math.round((min * 60 + sec + ms / 1000) * 1000) / 1000
+  }
+
+  return null
 }
 ```
 
 - [ ] **Step 5: Rodar o teste para confirmar que passa**
 
 Run: `npm test -- time`
-Expected: PASS — 11 testes
+Expected: PASS — 15 testes
 
 - [ ] **Step 6: Commit**
 
@@ -380,8 +424,10 @@ git commit -m "feat: tipos compartilhados e formatacao de tempo"
   - `clampTime(time: number, duration: number): number`
   - `generateTimesByDuration(chunk: number, duration: number): number[]`
   - `pointsFromTimes(times: number[], makeId: () => string): CutPoint[]`
+  - `generatePoints(chunk: number, duration: number, previous: CutPoint[], makeId: () => string): CutPoint[]` — como `pointsFromTimes(generateTimesByDuration(...))`, mas recusa substituir uma lista não vazia por um resultado vazio
   - `addPoint(points: CutPoint[], time: number, duration: number, id: string): CutPoint[]`
   - `movePoint(points: CutPoint[], id: string, time: number, duration: number): CutPoint[]`
+  - `dragPoint(points: CutPoint[], id: string, time: number, duration: number): CutPoint[]` — reposiciona SEM colapsar nem reordenar, travado a MIN_GAP do vizinho mais próximo; usado a cada evento de ponteiro durante um arrasto, com `movePoint` reservado pro gesto concluído
   - `removePoint(points: CutPoint[], id: string): CutPoint[]`
   - `segmentsFrom(points: CutPoint[], duration: number): Segment[]`
 
@@ -398,8 +444,10 @@ import {
   clampTime,
   generateTimesByDuration,
   pointsFromTimes,
+  generatePoints,
   addPoint,
   movePoint,
+  dragPoint,
   removePoint,
   segmentsFrom,
 } from './cutPoints'
@@ -469,6 +517,33 @@ describe('pointsFromTimes', () => {
   })
 })
 
+describe('generatePoints', () => {
+  it('gera normalmente quando não havia pontos antes', () => {
+    const result = generatePoints(29.5, 100, [], makeIdGen())
+    expect(result.map((p) => p.time)).toEqual([29.5, 59, 88.5])
+  })
+
+  it('substitui a lista quando o resultado novo não é vazio, mesmo com pontos antigos', () => {
+    const previous = pts(10)
+    const result = generatePoints(29.5, 100, previous, makeIdGen())
+    expect(result.map((p) => p.time)).toEqual([29.5, 59, 88.5])
+  })
+
+  it('recusa substituir marcadores existentes por uma lista vazia', () => {
+    // 120s de duração pedida numa timeline de 100s não gera ponto nenhum. Sem a
+    // guarda, isto apagaria em silêncio os marcadores que o usuário já tinha
+    // colocado na mão só porque ele mexeu no campo de duração.
+    const previous = pts(10, 30)
+    const result = generatePoints(120, 100, previous, makeIdGen())
+    expect(result).toBe(previous)
+  })
+
+  it('permite lista vazia quando já não havia pontos — "uma parte só" é resultado legítimo', () => {
+    const result = generatePoints(120, 100, [], makeIdGen())
+    expect(result).toEqual([])
+  })
+})
+
 describe('addPoint', () => {
   it('insere mantendo a ordem', () => {
     const result = addPoint(pts(10, 30), 20, 100, 'novo')
@@ -526,6 +601,48 @@ describe('movePoint', () => {
   })
 })
 
+describe('dragPoint', () => {
+  it('move livremente quando há espaço de sobra', () => {
+    const result = dragPoint(pts(10, 30, 50), 'id2', 35, 100)
+    expect(result.find((p) => p.id === 'id2')!.time).toBe(35)
+  })
+
+  it('não deixa cruzar o vizinho da direita, mesmo pedindo além dele', () => {
+    // pts(10, 30, 50): arrastar id1 (10) até 45 tentaria passar por cima de id2 (30).
+    // Sem a trava, isto colapsaria id1 em cima de id2 NO MEIO do gesto.
+    const result = dragPoint(pts(10, 30, 50), 'id1', 45, 100)
+    expect(result.map((p) => p.time)).toEqual([29.95, 30, 50])
+    expect(result.find((p) => p.id === 'id1')!.time).toBe(29.95)
+  })
+
+  it('não deixa cruzar o vizinho da esquerda', () => {
+    const result = dragPoint(pts(10, 30, 50), 'id2', 5, 100)
+    expect(result.find((p) => p.id === 'id2')!.time).toBe(10.05)
+  })
+
+  it('nunca colapsa nem reordena — a lista sai do mesmo tamanho e na mesma ordem', () => {
+    const before = pts(10, 30, 50)
+    const result = dragPoint(before, 'id1', 999, 100)
+    expect(result).toHaveLength(3)
+    expect(result.map((p) => p.id)).toEqual(['id1', 'id2', 'id3'])
+  })
+
+  it('sem vizinho à esquerda, limita à borda inicial do vídeo', () => {
+    const result = dragPoint(pts(30, 50), 'id1', -10, 100)
+    expect(result.find((p) => p.id === 'id1')!.time).toBe(MIN_GAP)
+  })
+
+  it('sem vizinho à direita, limita à borda final do vídeo', () => {
+    const result = dragPoint(pts(30, 50), 'id2', 999, 100)
+    expect(result.find((p) => p.id === 'id2')!.time).toBe(99.95)
+  })
+
+  it('ignora id inexistente', () => {
+    const before = pts(10, 30)
+    expect(dragPoint(before, 'fantasma', 50, 100)).toBe(before)
+  })
+})
+
 describe('removePoint', () => {
   it('remove pelo id', () => {
     expect(removePoint(pts(10, 30), 'id1').map((p) => p.time)).toEqual([30])
@@ -564,6 +681,8 @@ describe('segmentsFrom', () => {
   })
 })
 ```
+
+> **Nota da revisão final (fix wave):** duas funções entraram depois da primeira versão deste teste. `generatePoints` existe porque `useCutPoints.generate` (Task 14) substituía a lista inteira mesmo quando o cálculo por duração dava vazio — gerar zero pontos é legítimo (spec §5, "uma parte só"), mas fazer isso apagar marcadores manuais em silêncio não é. `dragPoint` existe porque `Timeline.onPointerMove` (Task 13) chamava `movePoint` — que COLAPSA — a cada evento de ponteiro: numa faixa de 10s a zona de colapso tem ~9px, e arrastar um marcador cruzando três outros apagava os três sem aviso. `dragPoint` trava a MIN_GAP do vizinho durante o arrasto; `movePoint` continua sendo o gesto concluído, chamado uma vez no `pointerup`.
 
 - [ ] **Step 2: Rodar o teste para confirmar que falha**
 
@@ -612,6 +731,21 @@ export function pointsFromTimes(times: number[], makeId: () => string): CutPoint
   return times.map((time) => ({ id: makeId(), time }))
 }
 
+// Gerar zero pontos é um resultado legítimo por si só (spec §5 abençoa "uma parte
+// só"). O que não é legítimo é usar isso pra apagar em silêncio marcadores que o
+// usuário já colocou na mão: se o cálculo por duração não produz nada E já existem
+// pontos, mantém a lista atual em vez de substituir por vazio.
+export function generatePoints(
+  chunk: number,
+  duration: number,
+  previous: CutPoint[],
+  makeId: () => string,
+): CutPoint[] {
+  const next = pointsFromTimes(generateTimesByDuration(chunk, duration), makeId)
+  if (next.length === 0 && previous.length > 0) return previous
+  return next
+}
+
 const byTime = (a: CutPoint, b: CutPoint): number => a.time - b.time
 
 export function addPoint(
@@ -643,6 +777,34 @@ export function removePoint(points: CutPoint[], id: string): CutPoint[] {
   return points.filter((p) => p.id !== id)
 }
 
+// Reposiciona SEM colapsar e SEM reordenar — usado quadro a quadro durante um
+// arrasto. `movePoint` colapsa qualquer ponto a menos de MIN_GAP do alvo, o que é
+// certo para o gesto CONCLUÍDO (soltar em cima de outro deve fundir os dois), mas
+// destrutivo demais para cada evento de ponteiro no caminho: numa faixa de 10s a
+// zona de colapso tem ~9px, e arrastar um marcador cruzando três outros apagaria
+// os três sem aviso. Por isso o ponto fica travado a MIN_GAP do vizinho mais
+// próximo em vez de engolir a lista inteira — o valor bruto do ponteiro (sem esse
+// travamento) continua disponível pra quem quiser aplicar o `movePoint` de verdade
+// ao soltar o botão.
+export function dragPoint(
+  points: CutPoint[],
+  id: string,
+  time: number,
+  duration: number,
+): CutPoint[] {
+  const index = points.findIndex((p) => p.id === id)
+  if (index === -1) return points
+
+  const prev = index > 0 ? points[index - 1] : undefined
+  const next = index < points.length - 1 ? points[index + 1] : undefined
+  const lo = prev ? round3(prev.time + MIN_GAP) : MIN_GAP
+  const hi = next ? round3(next.time - MIN_GAP) : round3(Math.max(duration - MIN_GAP, lo))
+  const wanted = Number.isFinite(time) ? time : lo
+  const bounded = round3(Math.min(Math.max(wanted, lo), Math.max(lo, hi)))
+
+  return points.map((p) => (p.id === id ? { ...p, time: bounded } : p))
+}
+
 export function segmentsFrom(points: CutPoint[], duration: number): Segment[] {
   if (!(duration > 0)) return []
   const times = points.map((p) => p.time).sort((a, b) => a - b)
@@ -658,7 +820,7 @@ export function segmentsFrom(points: CutPoint[], duration: number): Segment[] {
 - [ ] **Step 4: Rodar o teste para confirmar que passa**
 
 Run: `npm test -- cutPoints`
-Expected: PASS — 27 testes
+Expected: PASS — 38 testes
 
 - [ ] **Step 5: Commit**
 
@@ -832,6 +994,16 @@ describe('buildCutArgs', () => {
     expect(args.indexOf('-ss')).toBeLessThan(args.indexOf('-i'))
   })
 
+  it('coloca -t DEPOIS de -i (limita a duração da SAÍDA, não da leitura)', () => {
+    // -t antes de -i muda de significado: vira limite de leitura do arquivo de
+    // ENTRADA, não duração do que é escrito na saída. Silencioso — o ffmpeg não
+    // recusa o comando, só corta errado.
+    for (const mode of ['fast', 'exact'] as const) {
+      const args = buildCutArgs({ ...base, mode })
+      expect(args.indexOf('-t')).toBeGreaterThan(args.indexOf('-i'))
+    }
+  })
+
   it('formata os tempos com 3 casas decimais', () => {
     const args = buildCutArgs({ ...base, mode: 'fast' })
     expect(args[args.indexOf('-ss') + 1]).toBe('29.500')
@@ -934,7 +1106,7 @@ O `-y` é seguro aqui porque o nome de saída já passou por `uniqueFileName` an
 - [ ] **Step 4: Rodar o teste para confirmar que passa**
 
 Run: `npm test -- args`
-Expected: PASS — 7 testes
+Expected: PASS — 8 testes
 
 - [ ] **Step 5: Commit**
 
@@ -1512,6 +1684,13 @@ export type FfmpegHandle = {
 
 const STDERR_LINES_KEPT = 12
 
+// Se o `taskkill` falhar de verdade (não a corrida benigna comentada em
+// `killTree`), `close` nunca dispara e a promise nunca se resolve. Sem um limite,
+// isso trava `ipc.ts` pra sempre: o `finally` que zera `currentJob` depende desta
+// promise assentar, e enquanto ela não assenta, toda exportação seguinte esbarra
+// em "Já existe uma exportação em andamento" até reiniciar o app inteiro.
+const KILL_TIMEOUT_MS = 5000
+
 function killTree(pid: number): void {
   if (process.platform === 'win32') {
     // No Windows, matar só o processo do Node deixa o ffmpeg filho vivo
@@ -1540,6 +1719,9 @@ export function runFfmpeg(
   const reader = createProgressReader()
   const errors: string[] = []
   let cancelled = false
+  let closed = false
+  let killTimer: ReturnType<typeof setTimeout> | null = null
+  let forceCancel: (() => void) | null = null
 
   child.stdout.setEncoding('utf8')
   child.stdout.on('data', (chunk: string) => {
@@ -1557,10 +1739,17 @@ export function runFfmpeg(
   })
 
   const promise = new Promise<void>((resolve, reject) => {
+    forceCancel = () => reject(new FfmpegCancelled())
+
     child.on('error', (err) =>
       reject(new Error(`Falha ao iniciar o FFmpeg: ${err.message}`)),
     )
     child.on('close', (code) => {
+      closed = true
+      if (killTimer) {
+        clearTimeout(killTimer)
+        killTimer = null
+      }
       if (cancelled) return reject(new FfmpegCancelled())
       if (code === 0) return resolve()
       const detail = errors.length > 0 ? errors.join('\n') : `código de saída ${code}`
@@ -1574,10 +1763,20 @@ export function runFfmpeg(
       if (cancelled || child.pid === undefined) return
       cancelled = true
       killTree(child.pid)
+      // Rede de segurança contra o `taskkill` que falha de verdade: se `close` não
+      // disparar dentro do prazo, força o assentamento mesmo assim. O processo pode
+      // continuar vivo — mas é o mal menor: `jobs.ts` tenta apagar o arquivo parcial
+      // e tolera falhar (o processo zumbi pode segurar o arquivo), e o app volta a
+      // aceitar exportações em vez de ficar preso pra sempre.
+      killTimer = setTimeout(() => {
+        if (!closed) forceCancel?.()
+      }, KILL_TIMEOUT_MS)
     },
   }
 }
 ```
+
+> **Nota da revisão final (fix wave):** um `taskkill` que falha de verdade (não a corrida benigna já comentada) deixava esta promise pendurada pra sempre — `close` nunca dispara, `ipc.ts` nunca zera `currentJob`, e todo export seguinte esbarra em "Já existe uma exportação em andamento" até reiniciar o app. O `cancel()` agora arma um timer de 5s que força o assentamento se `close` não vier a tempo. Sem teste automatizado novo para este caso: simular uma falha real de `taskkill` exigiria mockar `child_process`, fora do escopo dos testes de integração existentes (que exigem FFmpeg real).
 
 - [ ] **Step 4: Rodar o teste para confirmar que passa**
 
@@ -1600,7 +1799,7 @@ git commit -m "feat: execucao do ffmpeg com progresso e cancelamento de arvore n
 - Test: `src/main/jobs.integration.test.ts`
 
 **Interfaces:**
-- Consumes: `buildCutArgs` (T5), `runFfmpeg`/`FfmpegCancelled` (T8), `partFileName`/`uniqueFileName` (T4), `ExportRequest`/`JobProgress`/`JobResult` (T2)
+- Consumes: `buildCutArgs` (T5), `runFfmpeg`/`FfmpegCancelled` (T8), `partFileName`/`uniqueFileName`/`outputExtension` (T4), `ExportRequest`/`JobProgress`/`JobResult` (T2)
 - Produces: `startExportJob(ffmpegPath: string, request: ExportRequest, onProgress: (p: JobProgress) => void): { promise: Promise<JobResult>; cancel: () => void }`
 
 Uma parte de cada vez. Rodar vários FFmpegs em paralelo satura a CPU e cada um fica proporcionalmente mais lento — o total não melhora e o progresso fica impossível de reportar.
@@ -1748,7 +1947,7 @@ import { mkdirSync, existsSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { buildCutArgs } from './ffmpeg/args'
 import { runFfmpeg, FfmpegCancelled, type FfmpegHandle } from './ffmpeg/run'
-import { partFileName, uniqueFileName } from '../shared/naming'
+import { outputExtension, partFileName, uniqueFileName } from '../shared/naming'
 import type { ExportRequest, JobProgress, JobResult } from '../shared/types'
 
 export function startExportJob(
@@ -1778,12 +1977,16 @@ export function startExportJob(
     }
 
     const total = request.segments.length
+    // Deriva do modo em vez de confiar na extensão que o renderer mandou: assim um
+    // export em modo exato nunca sai gravado sob um nome que não seja `.mp4`, nem
+    // que o pedido chegue com `request.extension` errado ou desatualizado.
+    const extension = outputExtension(request.mode, request.extension)
 
     for (const segment of request.segments) {
       if (cancelled) return { status: 'cancelled', files: done }
 
       const fileName = uniqueFileName(
-        partFileName(request.baseName, segment.index, total, request.extension),
+        partFileName(request.baseName, segment.index, total, extension),
         (name) => existsSync(join(request.outputDir, name)),
       )
       const outputPath = join(request.outputDir, fileName)
@@ -1893,6 +2096,7 @@ git commit -m "feat: fila de exportacao sequencial com progresso, cancelamento e
 
 **Files:**
 - Create: `src/main/store.ts`
+- Create: `src/shared/clipUrl.ts`
 - Create: `src/main/protocol.ts`
 - Create: `src/main/ipc.ts`
 - Modify: `src/main/index.ts`
@@ -1955,13 +2159,27 @@ Os defaults saem direto do spec §11: corte exato ligado, 30.0s, sem pasta escol
 
 - [ ] **Step 2: Registrar o protocolo `clip://`**
 
+Criar `src/shared/clipUrl.ts` — puro, sem `electron`, importado tanto pelo main (`protocol.ts`) quanto pelo preload (`preload/index.ts`), pra não ter duas cópias da mesma string de URL divergindo com o tempo:
+
+```ts
+export const CLIP_SCHEME = 'clip'
+
+// O caminho vai como parâmetro de busca, não como caminho da URL, justamente pra
+// não brigar com `C:\` — a barra invertida e os dois pontos da letra do drive
+// quebram o parser de URL.
+export function toClipUrl(filePath: string): string {
+  return `${CLIP_SCHEME}://local/?p=${encodeURIComponent(filePath)}`
+}
+```
+
 Criar `src/main/protocol.ts`:
 
 ```ts
 import { protocol, net } from 'electron'
 import { pathToFileURL } from 'node:url'
+import { CLIP_SCHEME, toClipUrl } from '../shared/clipUrl'
 
-export const CLIP_SCHEME = 'clip'
+export { CLIP_SCHEME, toClipUrl }
 
 // Precisa rodar ANTES de app.whenReady()
 export function registerClipScheme(): void {
@@ -1981,13 +2199,9 @@ export function handleClipProtocol(): void {
     return net.fetch(pathToFileURL(filePath).toString())
   })
 }
-
-export function toClipUrl(filePath: string): string {
-  return `${CLIP_SCHEME}://local/?p=${encodeURIComponent(filePath)}`
-}
 ```
 
-O caminho vai como parâmetro de busca, não como caminho da URL, justamente pra não brigar com `C:\` — a barra invertida e os dois pontos da letra do drive quebram o parser de URL. `net.fetch` sobre `file://` já responde a requisições *Range*, que é o que o `<video>` usa pra pular pra frente sem baixar tudo.
+`net.fetch` sobre `file://` já responde a requisições *Range*, que é o que o `<video>` usa pra pular pra frente sem baixar tudo.
 
 - [ ] **Step 3: Registrar os canais de IPC**
 
@@ -2066,14 +2280,25 @@ export function registerIpc(): void {
     }
   })
 
-  ipcMain.on('export:cancel', () => currentJob?.cancel())
+  ipcMain.on('export:cancel', () => cancelCurrentJob())
 
   ipcMain.handle('shell:openFolder', (_event, path: string) => shell.openPath(path))
 
   ipcMain.handle('prefs:get', (): Prefs => getPrefs())
   ipcMain.handle('prefs:set', (_event, patch: Partial<Prefs>): Prefs => setPrefs(patch))
 }
+
+// Exportado para o `before-quit` do processo principal (src/main/index.ts). Nada
+// prende a exportação ao ciclo de vida do app: fechar a janela encerra o processo,
+// e o `ffmpeg.exe` filho ou segue rodando sem cabeça, ou morre num pipe quebrado —
+// e nesse segundo caso ninguém roda a limpeza do arquivo parcial, deixando um
+// `_parte_NN.mp4` truncado com a mesma cara de um arquivo pronto.
+export function cancelCurrentJob(): void {
+  currentJob?.cancel()
+}
 ```
+
+> **Nota da revisão final (fix wave):** `cancelCurrentJob` foi extraído pra ser chamado também no `app.on('before-quit', ...)` do `src/main/index.ts` — esse handler de ciclo de vida não é código gerado pelo scaffold e por isso nunca teve representação literal neste plano; só a mudança em `ipc.ts` (que o `before-quit` importa) precisava ficar sincronizada aqui.
 
 - [ ] **Step 4: Expor a ponte no preload**
 
@@ -2085,6 +2310,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 import type {
   ExportRequest, FfmpegCheck, JobProgress, JobResult, Prefs, VideoInfo,
 } from '../shared/types'
+import { toClipUrl } from '../shared/clipUrl'
 
 const api = {
   checkFfmpeg: (): Promise<FfmpegCheck> => ipcRenderer.invoke('app:checkFfmpeg'),
@@ -2112,7 +2338,7 @@ const api = {
 
   setPrefs: (patch: Partial<Prefs>): Promise<Prefs> => ipcRenderer.invoke('prefs:set', patch),
 
-  fileUrl: (path: string): string => `clip://local/?p=${encodeURIComponent(path)}`,
+  fileUrl: (path: string): string => toClipUrl(path),
 }
 
 export type ClipApi = typeof api
@@ -2120,6 +2346,8 @@ export type ClipApi = typeof api
 contextBridge.exposeInMainWorld('electron', electronAPI)
 contextBridge.exposeInMainWorld('clip', api)
 ```
+
+> **Nota da revisão final (fix wave):** `fileUrl` reimplementava a mesma string que `protocol.ts` já montava em `toClipUrl` — duas cópias idênticas, uma testada e morta (`protocol.ts`, nada a importava), a outra viva e sem teste algum (esta, o que o `<video>` do player de fato usa). Ambas foram para `src/shared/clipUrl.ts`; esta função agora importa de lá.
 
 - [ ] **Step 5: Ligar tudo no processo principal**
 
@@ -2354,6 +2582,7 @@ export function WelcomeScreen({ onPick, onDropFile, error }: Props): React.JSX.E
 Criar `src/renderer/src/components/FileInfo.tsx`:
 
 ```tsx
+import { RefreshCw } from 'lucide-react'
 import type { VideoInfo } from '@shared/types'
 import { formatTime } from '@shared/time'
 import { formatSize } from '../lib/formatSize'
@@ -2365,7 +2594,9 @@ const Row = ({ label, value }: { label: string; value: string }): React.JSX.Elem
   </div>
 )
 
-export function FileInfo({ video }: { video: VideoInfo }): React.JSX.Element {
+type Props = { video: VideoInfo; onReset: () => void }
+
+export function FileInfo({ video, onReset }: Props): React.JSX.Element {
   return (
     <div className="rounded-lg bg-[#1a1a2e] p-4">
       <p className="mb-3 truncate font-medium" title={video.fileName}>
@@ -2380,10 +2611,19 @@ export function FileInfo({ video }: { video: VideoInfo }): React.JSX.Element {
       {video.bitrate !== null && (
         <Row label="Bitrate" value={`${Math.round(video.bitrate / 1000)} kbps`} />
       )}
+
+      <button
+        onClick={onReset}
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded bg-[#252547] px-3 py-2 text-sm transition-colors duration-150 hover:bg-[#252547]/70"
+      >
+        <RefreshCw size={16} /> Trocar vídeo
+      </button>
     </div>
   )
 }
 ```
+
+> **Nota da revisão final (fix wave):** `video` só era setado uma vez, em `App`, e nada nunca zerava de volta — `WelcomeScreen` ficava inalcançável depois do primeiro vídeo, e como o corte é feito em lote, isso significava fechar e reabrir o app a cada arquivo. `onReset` chega por prop (T12 monta `App` pra chamar `setVideo(null)`) e desmonta o `Editor` inteiro — é isso que limpa pontos de corte, player e exportação juntos.
 
 - [ ] **Step 8: Montar o App**
 
@@ -2678,7 +2918,7 @@ import { VideoPlayer } from './components/VideoPlayer'
 import { PlayerControls } from './components/PlayerControls'
 
 // dentro de um novo componente Editor, para que os hooks só rodem com vídeo carregado:
-function Editor({ video }: { video: VideoInfo }): React.JSX.Element {
+function Editor({ video, onReset }: { video: VideoInfo; onReset: () => void }): React.JSX.Element {
   const player = usePlayer(video)
 
   useEffect(() => {
@@ -2712,13 +2952,30 @@ function Editor({ video }: { video: VideoInfo }): React.JSX.Element {
         <VideoPlayer video={video} player={player} />
         <PlayerControls video={video} player={player} />
       </div>
-      <FileInfo video={video} />
+      <FileInfo video={video} onReset={onReset} />
     </div>
   )
 }
 ```
 
-E no `App`, trocar o bloco final por `return <Editor video={video} />`.
+E no `App`, trocar o bloco final por:
+
+```tsx
+return (
+  <Editor
+    video={video}
+    onReset={() => {
+      // Desmontar o Editor (via video === null) é o reset certo: limpa pontos de
+      // corte, estado do player e estado de exportação juntos, de uma vez —
+      // tentar zerar cada hook individualmente arriscaria esquecer um.
+      setVideo(null)
+      setError(null)
+    }}
+  />
+)
+```
+
+> **Nota da revisão final (fix wave):** `onReset` (item 3 do fix wave) entra aqui porque é aqui que `Editor` ganha corpo e `App` decide o que renderizar depois dele. `FileInfo` (T11) recebe `onReset` como prop; o clique no botão "Trocar vídeo" some com o vídeo carregado e volta pra `WelcomeScreen`.
 
 - [ ] **Step 5: Verificar manualmente**
 
@@ -2765,6 +3022,7 @@ type Props = {
   points: CutPoint[]
   currentTime: number
   onSeek: (time: number) => void
+  onDragPoint: (id: string, time: number) => void
   onMovePoint: (id: string, time: number) => void
   onRemovePoint: (id: string) => void
 }
@@ -2782,6 +3040,7 @@ export function Timeline({
   points,
   currentTime,
   onSeek,
+  onDragPoint,
   onMovePoint,
   onRemovePoint,
 }: Props): React.JSX.Element {
@@ -2806,9 +3065,18 @@ export function Timeline({
     <div
       className="select-none rounded-lg bg-[#1a1a2e] p-4"
       onPointerMove={(e) => {
-        if (dragging) onMovePoint(dragging, timeFromEvent(e.clientX))
+        // Só reposiciona (sem colapsar) enquanto o gesto está em andamento. O
+        // valor bruto do ponteiro é o que importa aqui — ele pode estar "além" de
+        // um vizinho; quem trava a posição exibida é o `dragPoint` em si.
+        if (dragging) onDragPoint(dragging, timeFromEvent(e.clientX))
       }}
-      onPointerUp={() => setDragging(null)}
+      onPointerUp={(e) => {
+        // Aplica o gesto CONCLUÍDO com o alvo bruto do ponteiro, não com a posição
+        // travada que estava sendo exibida — é isto que permite colapsar de
+        // verdade quando o usuário solta em cima de outro marcador de propósito.
+        if (dragging) onMovePoint(dragging, timeFromEvent(e.clientX))
+        setDragging(null)
+      }}
       onPointerLeave={() => setDragging(null)}
       onPointerCancel={() => setDragging(null)}
     >
@@ -2823,6 +3091,8 @@ export function Timeline({
       <div
         ref={trackRef}
         onPointerDown={(e) => {
+          // Botão direito na faixa não deve navegar — só o clique esquerdo seeka.
+          if (e.button !== 0) return
           if (e.target === e.currentTarget) onSeek(timeFromEvent(e.clientX))
         }}
         className="relative h-16 cursor-pointer rounded bg-[#252547]"
@@ -2875,6 +3145,8 @@ export function Timeline({
 }
 ```
 
+> **Nota da revisão final (fix wave):** duas correções aqui. (1) `onPointerMove` chamava `onMovePoint` — que colapsa — a cada evento durante o arrasto; numa faixa de 10s a zona de colapso tem ~9px, e cruzar um marcador por cima de outros três apagava os três sem aviso. Agora `onPointerMove` chama `onDragPoint` (usa o `dragPoint` puro de `cutPoints.ts`, que trava sem colapsar); `onMovePoint` só roda uma vez, no `onPointerUp`, com o alvo bruto do ponteiro — é isso que preserva o colapso-ao-soltar-de-propósito do spec §5. (2) `onPointerDown` da faixa não checava `e.button`: botão direito nela também navegava o player, empilhado em cima do menu de contexto do sistema.
+
 - [ ] **Step 2: Ligar a timeline no Editor**
 
 Em `src/renderer/src/App.tsx`, dentro de `Editor`, adicionar o estado dos pontos e renderizar a timeline abaixo dos controles:
@@ -2882,7 +3154,7 @@ Em `src/renderer/src/App.tsx`, dentro de `Editor`, adicionar o estado dos pontos
 ```tsx
 import { useState } from 'react'
 import type { CutPoint } from '@shared/types'
-import { movePoint, removePoint } from '@shared/cutPoints'
+import { dragPoint, movePoint, removePoint } from '@shared/cutPoints'
 import { Timeline } from './components/Timeline'
 
 // dentro de Editor:
@@ -2894,10 +3166,13 @@ const [points, setPoints] = useState<CutPoint[]>([])
   points={points}
   currentTime={player.currentTime}
   onSeek={player.seek}
+  onDragPoint={(id, time) => setPoints((p) => dragPoint(p, id, time, video.duration))}
   onMovePoint={(id, time) => setPoints((p) => movePoint(p, id, time, video.duration))}
   onRemovePoint={(id) => setPoints((p) => removePoint(p, id))}
 />
 ```
+
+(Esta fiação com `useState` local é temporária — a Task 14 substitui por `useCutPoints`, que já expõe `drag`/`move` prontos.)
 
 - [ ] **Step 3: Verificar manualmente**
 
@@ -2942,7 +3217,7 @@ git commit -m "feat: timeline com regua, playhead e marcadores arrastaveis"
 **Interfaces:**
 - Consumes: `cutPoints` inteiro (T3), `formatTime` (T2), `window.clip.getPrefs/setPrefs` (T10)
 - Produces: `useCutPoints(duration: number)` devolvendo
-  `{ points, segments, generate(chunk), addAt(time), move(id, time), remove(id), clear() }`
+  `{ points, segments, generate(chunk), addAt(time), drag(id, time), move(id, time), remove(id), clear() }`
 
 - [ ] **Step 1: Criar o hook**
 
@@ -2953,9 +3228,9 @@ import { useCallback, useMemo, useState } from 'react'
 import type { CutPoint } from '@shared/types'
 import {
   addPoint,
-  generateTimesByDuration,
+  dragPoint,
+  generatePoints,
   movePoint,
-  pointsFromTimes,
   removePoint,
   segmentsFrom,
 } from '@shared/cutPoints'
@@ -2968,12 +3243,20 @@ export function useCutPoints(duration: number) {
   const segments = useMemo(() => segmentsFrom(points, duration), [points, duration])
 
   const generate = useCallback(
-    (chunk: number) => setPoints(pointsFromTimes(generateTimesByDuration(chunk, duration), makeId)),
+    (chunk: number) => setPoints((p) => generatePoints(chunk, duration, p, makeId)),
     [duration],
   )
 
   const addAt = useCallback(
     (time: number) => setPoints((p) => addPoint(p, time, duration, makeId())),
+    [duration],
+  )
+
+  // Chamado a cada evento de ponteiro durante o arrasto: reposiciona sem colapsar
+  // nem reordenar (ver comentário do `dragPoint`). `move` continua sendo o gesto
+  // CONCLUÍDO — chamado uma vez, no pointerup — que reordena e colapsa de verdade.
+  const drag = useCallback(
+    (id: string, time: number) => setPoints((p) => dragPoint(p, id, time, duration)),
     [duration],
   )
 
@@ -2986,11 +3269,13 @@ export function useCutPoints(duration: number) {
 
   const clear = useCallback(() => setPoints([]), [])
 
-  return { points, segments, generate, addAt, move, remove, clear }
+  return { points, segments, generate, addAt, drag, move, remove, clear }
 }
 
 export type CutPointsState = ReturnType<typeof useCutPoints>
 ```
+
+> **Nota da revisão final (fix wave):** `generate` agora passa pelo `generatePoints` (T3), que recusa substituir uma lista não vazia por um resultado vazio — sem isso, digitar uma duração maior que o vídeo (ou zerar o campo, ver `changeChunk` abaixo) apagava em silêncio os marcadores manuais. E `drag` é novo: a `Timeline` (T13) chama ele a cada evento de ponteiro durante o arrasto; `move` ficou reservado pro gesto concluído.
 
 - [ ] **Step 2: Criar o painel**
 
@@ -3072,7 +3357,9 @@ export function CutPanel({
       </div>
 
       <p className="mt-3 font-mono text-sm">
-        <span className="text-[#06d6a0]">{cuts.segments.length} partes</span>
+        <span className="text-[#06d6a0]">
+          {cuts.segments.length} {cuts.segments.length === 1 ? 'parte' : 'partes'}
+        </span>
         {last && (
           <>
             <span className="text-[#e7e7f0]/40"> · última com </span>
@@ -3092,6 +3379,7 @@ Em `src/renderer/src/App.tsx`, dentro de `Editor`: trocar o `useState<CutPoint[]
 ```tsx
 const cuts = useCutPoints(video.duration)
 const [chunk, setChunk] = useState(30)
+const saveChunkTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
 useEffect(() => {
   // A duração vem da sessão anterior e pode ser MAIOR que este vídeo. Sem o limite,
@@ -3109,11 +3397,38 @@ useEffect(() => {
   )
 }, [video.duration])
 
+// Some ao desmontar (troca de vídeo) para não gravar preferência de uma sessão
+// que já não existe mais.
+useEffect(() => {
+  return () => {
+    if (saveChunkTimer.current) clearTimeout(saveChunkTimer.current)
+  }
+}, [])
+
 const changeChunk = (value: number): void => {
-  setChunk(value)
-  void window.clip.setPrefs({ chunkDuration: value })
+  // `Number('')` é 0, `Number('-')` é NaN. Sem esta guarda, esvaziar o campo ou
+  // digitar um sinal solto grava um `chunkDuration` inválido — e como `min`/`max`
+  // do <input type="number"> não travam o que foi DIGITADO (só o que o
+  // clique-arrasto das setinhas produz), um valor acima da duração do vídeo
+  // também passaria direto. Os dois casos fazem `generateTimesByDuration`
+  // devolver `[]`, e sem a guarda irmã em `useCutPoints.generate` isso apagaria
+  // os marcadores manuais em silêncio.
+  if (!Number.isFinite(value)) return
+  const clamped = Math.min(Math.max(value, 1), Math.max(video.duration, 1))
+  setChunk(clamped)
+
+  // Debounce: o slider dispara `onChange` a cada pixel arrastado, e gravar no
+  // disco (electron-store) em cada tique é síncrono e caro — num vídeo de 1h,
+  // milhares de escritas por arrasto. O valor exibido (`chunk`) atualiza na
+  // hora; só a persistência espera o usuário parar de mexer.
+  if (saveChunkTimer.current) clearTimeout(saveChunkTimer.current)
+  saveChunkTimer.current = setTimeout(() => {
+    void window.clip.setPrefs({ chunkDuration: clamped })
+  }, 300)
 }
 ```
+
+> **Nota da revisão final (fix wave):** duas correções aqui. (1) `changeChunk` fazia `Number(e.target.value)` sem validar: campo vazio virava `0`, um `-` solto virava `NaN`, e nem um nem outro eram barrados antes de ir pro `setChunk`/`setPrefs` — os dois alimentavam `generateTimesByDuration`, que devolve `[]`, e sem a guarda em `generatePoints` (T3) isso apagava os marcadores manuais. (2) a persistência em disco rodava a cada tique do slider — arrastar num vídeo de 1h disparava milhares de escritas síncronas. Agora é debounced em 300ms; `setChunk` continua imediato.
 
 No mapa de atalhos do efeito de teclado, adicionar:
 
@@ -3135,7 +3450,7 @@ Conferir:
 3. Pôr o player no meio e apertar `S` adiciona um marcador exatamente ali.
 4. `S` duas vezes no mesmo lugar **não** cria dois marcadores.
 5. Arrastar um marcador atualiza o contador de partes ao vivo.
-6. "Limpar" tira todos e volta pra "1 partes".
+6. "Limpar" tira todos e volta pra "1 parte" (singular).
 7. Fechar e reabrir o app: a duração digitada foi lembrada.
 8. Com o cursor dentro do input numérico, apertar espaço **não** dá play no vídeo.
 
@@ -3258,6 +3573,8 @@ export type ExportState = ReturnType<typeof useExport>
 
 - [ ] **Step 2: Criar a barra de exportação**
 
+> **Nota da revisão final (fix wave):** duas correções na `ExportBar.tsx` abaixo, ambas já cobertas pelo dado que `jobs.ts` já calculava e enviava. (1) `segmentFraction` do `JobProgress` nunca tinha barra própria — só o `overallFraction` (fila inteira) era desenhado, deixando "progresso por parte **e** geral" do spec §7 pela metade. Adicionada uma segunda barra, mais fina, ligada a `exp.progress?.segmentFraction`. (2) "Exportar 1 partes" concordava mal em número; agora singular/plural seguem `partCount`.
+
 Criar `src/renderer/src/components/ExportBar.tsx`:
 
 ```tsx
@@ -3272,6 +3589,7 @@ export function ExportBar({
   partCount: number
 }): React.JSX.Element {
   const pct = Math.round((exp.progress?.overallFraction ?? 0) * 100)
+  const segPct = Math.round((exp.progress?.segmentFraction ?? 0) * 100)
 
   return (
     <div className="rounded-lg bg-[#1a1a2e] p-4">
@@ -3316,17 +3634,27 @@ export function ExportBar({
             disabled={!exp.outputDir}
             className="flex items-center gap-2 rounded bg-[#06d6a0] px-4 py-2 font-medium text-[#0f0f1a] transition-colors duration-150 hover:bg-[#06d6a0]/80 disabled:opacity-30"
           >
-            <Download size={16} /> Exportar {partCount} partes
+            <Download size={16} /> Exportar {partCount} {partCount === 1 ? 'parte' : 'partes'}
           </button>
         )}
       </div>
 
       {exp.running && (
         <div className="mt-3">
-          <div className="h-2 overflow-hidden rounded bg-[#252547]">
+          <div className="h-2 overflow-hidden rounded bg-[#252547]" title="Progresso geral">
             <div
               className="h-full bg-[#4361ee] transition-[width] duration-150"
               style={{ width: `${pct}%` }}
+            />
+          </div>
+          {/* Barra mais fina: progresso DENTRO da parte atual. A de cima é a fila
+              inteira; sem esta, "progresso por parte e geral" (spec §7) só metade
+              existia — o dado já era calculado e enviado (jobs.ts), só não tinha
+              onde aparecer. */}
+          <div className="mt-1 h-1 overflow-hidden rounded bg-[#252547]" title="Progresso da parte atual">
+            <div
+              className="h-full bg-[#06d6a0] transition-[width] duration-150"
+              style={{ width: `${segPct}%` }}
             />
           </div>
           <p className="mt-2 font-mono text-xs text-[#e7e7f0]/60">
