@@ -2510,16 +2510,33 @@ export function usePlayer(video: VideoInfo) {
     [video.duration],
   )
 
+  // O elemento é a fonte única da verdade sobre estar tocando. Sem isto, um vídeo
+  // que termina sozinho deixa `playing` preso em true: o botão mostra "pausar", e
+  // o clique seguinte cai no ramo play() — que, num vídeo terminado, rebobina pro
+  // zero pela especificação do HTML. Ou seja, apertar pausar recomeçaria o clipe.
+  // `ended` entra junto com `pause` de propósito: os navegadores disparam `pause`
+  // antes na prática, mas depender dessa ordem seria suposição.
+  useEffect(() => {
+    const element = videoRef.current
+    if (!element) return
+    const aoTocar = (): void => setPlaying(true)
+    const aoParar = (): void => setPlaying(false)
+    element.addEventListener('play', aoTocar)
+    element.addEventListener('pause', aoParar)
+    element.addEventListener('ended', aoParar)
+    return () => {
+      element.removeEventListener('play', aoTocar)
+      element.removeEventListener('pause', aoParar)
+      element.removeEventListener('ended', aoParar)
+    }
+  }, [])
+
+  // Só comanda o elemento; quem escreve `playing` é o efeito acima.
   const toggle = useCallback(() => {
     const element = videoRef.current
     if (!element) return
-    if (element.paused) {
-      void element.play()
-      setPlaying(true)
-    } else {
-      element.pause()
-      setPlaying(false)
-    }
+    if (element.paused) void element.play()
+    else element.pause()
   }, [])
 
   const nudge = useCallback(
@@ -2532,7 +2549,6 @@ export function usePlayer(video: VideoInfo) {
       const element = videoRef.current
       if (!element) return
       element.pause()
-      setPlaying(false)
       const frame = video.fps > 0 ? 1 / video.fps : 1 / 30
       seek(element.currentTime + direction * frame)
     },
