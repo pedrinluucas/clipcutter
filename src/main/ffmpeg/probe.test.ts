@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseFps, parseProbeOutput } from './probe'
+import { join } from 'node:path'
 
 const sample = {
   streams: [
@@ -8,11 +9,11 @@ const sample = {
       codec_name: 'h264',
       width: 1920,
       height: 1080,
-      r_frame_rate: '30000/1001',
+      r_frame_rate: '30000/1001'
     },
-    { codec_type: 'audio', codec_name: 'aac' },
+    { codec_type: 'audio', codec_name: 'aac' }
   ],
-  format: { duration: '125.400000', size: '52428800', bit_rate: '3345000' },
+  format: { duration: '125.400000', size: '52428800', bit_rate: '3345000' }
 }
 
 describe('parseFps', () => {
@@ -31,8 +32,17 @@ describe('parseFps', () => {
 })
 
 describe('parseProbeOutput', () => {
+  // Caminhos montados com o separador NATIVO. `basename` e `extname` do Node são
+  // específicos da plataforma, e é isso que o app precisa: no Windows chegam
+  // caminhos do Windows, no macOS do macOS. Mas uma string com barra invertida
+  // NÃO é um caminho fora do Windows -- é um nome de arquivo com barras dentro.
+  // Fixar caminho fazia o teste passar só aqui e falhar no
+  // Linux, que foi o que derrubou o CI.
+  const caminho = join('videos', 'aula final.mp4')
+  const curto = join('v', 'a.mp4')
+
   it('extrai os metadados do vídeo', () => {
-    const info = parseProbeOutput(sample, 'C:\\videos\\aula final.mp4')
+    const info = parseProbeOutput(sample, caminho)
     expect(info.duration).toBe(125.4)
     expect(info.width).toBe(1920)
     expect(info.height).toBe(1080)
@@ -44,8 +54,8 @@ describe('parseProbeOutput', () => {
   })
 
   it('quebra o caminho em nome, base e extensão', () => {
-    const info = parseProbeOutput(sample, 'C:\\videos\\aula final.mp4')
-    expect(info.path).toBe('C:\\videos\\aula final.mp4')
+    const info = parseProbeOutput(sample, caminho)
+    expect(info.path).toBe(caminho)
     expect(info.fileName).toBe('aula final.mp4')
     expect(info.baseName).toBe('aula final')
     expect(info.extension).toBe('.mp4')
@@ -53,7 +63,7 @@ describe('parseProbeOutput', () => {
 
   it('aceita vídeo sem faixa de áudio', () => {
     const mudo = { ...sample, streams: [sample.streams[0]] }
-    expect(parseProbeOutput(mudo, 'C:\\v\\a.mp4').audioCodec).toBeNull()
+    expect(parseProbeOutput(mudo, curto).audioCodec).toBeNull()
   })
 
   it('recusa arquivo sem faixa de vídeo', () => {
@@ -63,12 +73,12 @@ describe('parseProbeOutput', () => {
 
   it('recusa duração ilegível', () => {
     const quebrado = { ...sample, format: { ...sample.format, duration: 'N/A' } }
-    expect(() => parseProbeOutput(quebrado, 'C:\\v\\a.mp4')).toThrow(/duração/)
+    expect(() => parseProbeOutput(quebrado, curto)).toThrow(/duração/)
   })
 
   it('aceita bitrate ausente', () => {
     const semBitrate = { ...sample, format: { duration: '10', size: '100' } }
-    expect(parseProbeOutput(semBitrate, 'C:\\v\\a.mp4').bitrate).toBeNull()
+    expect(parseProbeOutput(semBitrate, curto).bitrate).toBeNull()
   })
 
   it('ignora capa embutida e usa o fluxo de vídeo real', () => {
@@ -81,10 +91,10 @@ describe('parseProbeOutput', () => {
           width: 300,
           height: 169,
           r_frame_rate: '90000/1',
-          disposition: { attached_pic: 1 },
+          disposition: { attached_pic: 1 }
         },
-        ...sample.streams,
-      ],
+        ...sample.streams
+      ]
     }
     const info = parseProbeOutput(comCapa, 'C:\\videos\\baixado.mp4')
     expect(info.videoCodec).toBe('h264')
@@ -97,9 +107,15 @@ describe('parseProbeOutput', () => {
     const soCapa = {
       ...sample,
       streams: [
-        { codec_type: 'video', codec_name: 'png', width: 300, height: 300, disposition: { attached_pic: 1 } },
-        sample.streams[1],
-      ],
+        {
+          codec_type: 'video',
+          codec_name: 'png',
+          width: 300,
+          height: 300,
+          disposition: { attached_pic: 1 }
+        },
+        sample.streams[1]
+      ]
     }
     expect(() => parseProbeOutput(soCapa, 'C:\\musica\\faixa.mp3')).toThrow(/faixa de vídeo/)
   })
