@@ -7,6 +7,10 @@ import { registerIpc, cancelCurrentJob } from './ipc'
 
 registerClipScheme()
 
+// Referência à janela viva, para o segundo clique no atalho poder trazê-la à
+// frente em vez de abrir um app novo. Ver a trava de instância única no fim.
+let janela: BrowserWindow | null = null
+
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
@@ -47,6 +51,11 @@ function createWindow(): void {
   // é a rede de segurança pra qualquer coisa que passe por cima dele.
   mainWindow.webContents.on('will-navigate', (event) => event.preventDefault())
 
+  janela = mainWindow
+  mainWindow.on('closed', () => {
+    janela = null
+  })
+
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
@@ -56,34 +65,62 @@ function createWindow(): void {
   }
 }
 
+// TRAVA DE INSTÂNCIA ÚNICA
+//
+// Sem ela, clicar no atalho com o app já aberto sobe um SEGUNDO app inteiro. O
+// estrago não é a janela repetida:
+//
+// 1. As duas instâncias gravam no MESMO arquivo de preferências (electron-store),
+//    e a última a fechar sobrescreve o que a outra salvou.
+// 2. A trava de exportação concorrente (ipc.ts) vale dentro de UM processo. Dois
+//    apps têm duas travas independentes — os dois poderiam exportar para a mesma
+//    pasta ao mesmo tempo, e o `uniqueFileName` (que checa o disco antes de
+//    escrever) perderia a corrida: ambos veem "não existe" e gravam no mesmo nome.
+//
+// Quem chega depois desiste e manda a instância viva se mostrar.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    if (!janela) return
+    if (janela.isMinimized()) janela.restore()
+    janela.show()
+    janela.focus()
+  })
+
+  iniciar()
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
-  // Set app user model id for windows
-  // Precisa bater com o `appId` do electron-builder.yml. É o que o Windows usa
-  // para agrupar janelas na barra de tarefas e para o ícone do atalho — com o
-  // valor genérico do scaffold, o app apareceria como "electron".
-  electronApp.setAppUserModelId('com.pedrolucas.clipcutter')
+function iniciar(): void {
+  app.whenReady().then(() => {
+    // Set app user model id for windows
+    // Precisa bater com o `appId` do electron-builder.yml. É o que o Windows usa
+    // para agrupar janelas na barra de tarefas e para o ícone do atalho — com o
+    // valor genérico do scaffold, o app apareceria como "electron".
+    electronApp.setAppUserModelId('com.pedrolucas.clipcutter')
 
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
+    // Default open or close DevTools by F12 in development
+    // and ignore CommandOrControl + R in production.
+    // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
+    app.on('browser-window-created', (_, window) => {
+      optimizer.watchWindowShortcuts(window)
+    })
+
+    handleClipProtocol()
+    registerIpc()
+
+    createWindow()
+
+    app.on('activate', function () {
+      // On macOS it's common to re-create a window in the app when the
+      // dock icon is clicked and there are no other windows open.
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
   })
-
-  handleClipProtocol()
-  registerIpc()
-
-  createWindow()
-
-  app.on('activate', function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
-  })
-})
+}
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
