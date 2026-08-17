@@ -20,7 +20,8 @@
     "build:linux": "electron-vite build && electron-builder --linux",
     "test": "vitest run",
     "test:watch": "vitest",
-    "probe:range": "electron scripts/probe-range.js"
+    "probe:range": "electron scripts/probe-range.js",
+    "pdf:instalacao": "electron scripts/gerar-pdf-instalacao.js"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
