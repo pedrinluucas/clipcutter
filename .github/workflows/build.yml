@@ -1,0 +1,93 @@
+# Gera os instaladores na nuvem.
+#
+# POR QUE ISTO EXISTE
+# -------------------
+# A máquina de desenvolvimento tem Smart App Control ligado, e o electron-builder
+# precisa EXECUTAR um desinstalador recém-compilado para montar o instalador
+# NSIS. O SAC bloqueia essa execução (`spawn UNKNOWN`), então o instalador não
+# pode mais ser gerado lá. Aqui pode.
+#
+# E o .dmg do macOS só pode ser criado no próprio macOS — nenhuma máquina Windows
+# gera um, por mais configuração que se faça.
+#
+# Os dois builds ficam em "Artifacts", na página do run. Ao publicar uma tag
+# (v1.0.1, por exemplo), viram uma Release com os arquivos anexados.
+
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # `--ignore-scripts` pula o download dos binários do FFmpeg, que não são
+      # usados pelos testes (a lógica testada é pura) e custam ~150 MB por run.
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: npm test
+
+  windows:
+    needs: testes
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-instalador
+          path: dist/*setup.exe
+          retention-days: 30
+
+  macos:
+    needs: testes
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Sem certificado da Apple, o electron-builder tentaria assinar e falharia.
+      # Desligar a busca automática produz um .dmg NÃO assinado: funciona, mas o
+      # macOS exige abrir a primeira vez com botão direito > Abrir.
+      - run: npm run build:mac
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/*.dmg
+          retention-days: 30
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artefatos
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artefatos/**/*
+          generate_release_notes: true
