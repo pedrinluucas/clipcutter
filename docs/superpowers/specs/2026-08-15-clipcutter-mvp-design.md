@@ -69,6 +69,13 @@ que aprender IPC.
      slider não pode apagar marcador nenhum. Só viram cortes de verdade ao
      clicar "Gerar cortes". Acima de 300 marcadores a prévia não é desenhada
      (slider em 1s num vídeo de 1h daria 3.600, e a timeline redesenha ~60x/s).
+   - **Botões de duração pronta** (acrescentado em 17/08/2026, depois do MVP):
+     `29,9s` e `59,9s`, embaixo do campo numérico. Os valores têm margem de
+     propósito — ver §11 sobre o Facebook recusar 30,000s exatos; o mesmo
+     raciocínio vale para o limite de 60s. O rótulo mostra o VALOR e não o nome da
+     rede: um botão "30s" que preenche 29,9 pareceria bug, e nome de plataforma
+     envelhece enquanto o número não. O porquê fica no tooltip. Preset maior que o
+     vídeo aparece desabilitado, em vez de virar outro valor em silêncio.
    - "Cortar aqui": marca na posição atual do player
    - Arrastar marcador na timeline; apagar marcador
    - Contador ao vivo: `6 partes · última com 12.4s`
