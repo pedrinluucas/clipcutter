@@ -43,6 +43,10 @@ export function Timeline({
 }: Props): React.JSX.Element {
   const trackRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState<string | null>(null)
+  // Scrub: arrastar em qualquer lugar da faixa leva o playhead junto. A área toda
+  // é alvo, e não só o losango do playhead — ele tem ~10px, e mirar nele seria
+  // pior que não ter o gesto.
+  const [scrubbing, setScrubbing] = useState(false)
 
   const timeFromEvent = (clientX: number): number => {
     const rect = trackRef.current?.getBoundingClientRect()
@@ -90,9 +94,21 @@ export function Timeline({
         onPointerDown={(e) => {
           // Botão direito na faixa não deve navegar — só o clique esquerdo seeka.
           if (e.button !== 0) return
-          if (e.target === e.currentTarget) onSeek(timeFromEvent(e.clientX))
+          // Pressionar num marcador não chega aqui: eles interrompem a propagação.
+          // Então arrastar marcador continua sendo arrastar marcador, e não scrub.
+          if (e.target !== e.currentTarget) return
+          // Captura o ponteiro para o arrasto sobreviver ao cursor sair da faixa —
+          // mesmo motivo dos marcadores. Sem isso o playhead congela no meio.
+          e.currentTarget.setPointerCapture(e.pointerId)
+          setScrubbing(true)
+          onSeek(timeFromEvent(e.clientX))
         }}
-        className="relative h-16 cursor-pointer rounded bg-[#252547]"
+        onPointerMove={(e) => {
+          if (scrubbing) onSeek(timeFromEvent(e.clientX))
+        }}
+        onPointerUp={() => setScrubbing(false)}
+        onPointerCancel={() => setScrubbing(false)}
+        className="relative h-16 cursor-ew-resize rounded bg-[#252547]"
       >
         {ticks.map((t) => (
           <div

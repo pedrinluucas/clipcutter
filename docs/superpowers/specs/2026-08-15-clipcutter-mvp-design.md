@@ -51,6 +51,14 @@ que aprender IPC.
    - `S` — marcar corte na posição atual
 5. **Timeline** — régua de tempo, playhead acompanhando o vídeo, marcadores
    de corte, clique para navegar. Sem zoom, sem miniatura, sem waveform.
+   - **Scrub** (acrescentado em 15/08/2026, depois do MVP): arrastar em qualquer
+     lugar da faixa leva o playhead junto, continuamente. A área toda é alvo, não
+     só o losango do playhead — ele tem ~10px e mirar nele seria pior que não ter
+     o gesto. Pressionar em cima de um marcador continua arrastando o marcador, e
+     não fazendo scrub, porque os marcadores interrompem a propagação. Com captura
+     de ponteiro, então arrastar para fora da timeline não congela.
+     Motivo: só clicar passava sensação de playhead "enrijecido" — em qualquer
+     editor de vídeo o gesto esperado é agarrar e arrastar.
 6. **Pontos de corte**
    - "Gerar a cada X segundos": input numérico + slider (1.0s até a duração
      total, passo 0.1s)
