@@ -63,13 +63,13 @@ const html = `<!doctype html>
 <ol>
   <li>Extraia o <span class="arq">.zip</span> onde quiser — área de trabalho, Documentos, um pen drive.</li>
   <li>Abra a pasta extraída.</li>
-  <li>Dê duplo-clique em <span class="arq">ClipCutter.vbs</span>.</li>
+  <li>Dê duplo-clique em <span class="arq">ClipCutter.cmd</span>.</li>
 </ol>
 
 <div class="destaque">
-  <strong>Extraia a pasta inteira.</strong> O arquivo <span class="arq">ClipCutter.vbs</span>
+  <strong>Extraia a pasta inteira.</strong> O arquivo <span class="arq">ClipCutter.cmd</span>
   precisa ficar ao lado da pasta <span class="arq">app</span>. Se você abrir o
-  <span class="arq">.vbs</span> de dentro do zip sem extrair, não funciona.
+  <span class="arq">.cmd</span> de dentro do zip sem extrair, não funciona.
 </div>
 
 <h2>Por que esta versão não é bloqueada</h2>

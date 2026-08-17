@@ -22,7 +22,8 @@
     "test:watch": "vitest",
     "probe:range": "electron scripts/probe-range.js",
     "pdf:instalacao": "electron scripts/gerar-pdf-instalacao.js",
-    "pdf:portatil": "electron scripts/gerar-pdf-portatil.js"
+    "pdf:portatil": "electron scripts/gerar-pdf-portatil.js",
+    "atalho": "powershell -ExecutionPolicy Bypass -File scripts/criar-atalho.ps1"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
