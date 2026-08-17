@@ -47,13 +47,28 @@ export function generatePoints(
 
 const byTime = (a: CutPoint, b: CutPoint): number => a.time - b.time
 
+// RECUSA em vez de limitar quando o pedido cai fora da faixa cortável.
+//
+// `clampTime` existe para o ARRASTO, onde o marcador precisa continuar vivo para
+// o usuário poder trazê-lo de volta. Ao ADICIONAR é diferente: o começo e o fim do
+// vídeo já são fronteiras (spec §5 — pontos são fronteiras internas), então pedir
+// corte ali não é pedido inválido a ser corrigido, é pedido vazio.
+//
+// Limitar transformava "Cortar aqui" com o player parado em 0 — o clique mais
+// provável do app, já que é onde ele começa — num ponto em 0.05s. Isso exportava
+// uma parte de 50ms E deslocava todas as seguintes (a segunda saía com 29.95s em
+// vez de 30s). Pior que a parte vazia que o limite pretendia evitar: a vazia
+// falharia na hora, essa passa despercebida.
 export function addPoint(
   points: CutPoint[],
   time: number,
   duration: number,
   id: string,
 ): CutPoint[] {
-  const target = clampTime(time, duration)
+  if (!Number.isFinite(time)) return points
+  if (time <= MIN_GAP || time >= round3(duration - MIN_GAP)) return points
+
+  const target = round3(time)
   if (points.some((p) => tooClose(p.time, target))) return points
   return [...points, { id, time: target }].sort(byTime)
 }

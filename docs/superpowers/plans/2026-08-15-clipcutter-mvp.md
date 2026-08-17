@@ -608,9 +608,32 @@ describe('addPoint', () => {
     expect(addPoint(pts(59), 59.05, 100, 'novo')).toHaveLength(2)
   })
 
-  it('limita o ponto às bordas do vídeo', () => {
-    expect(addPoint([], 999, 100, 'novo')[0].time).toBe(99.95)
-    expect(addPoint([], 0, 100, 'novo')[0].time).toBe(0.05)
+  it('RECUSA cortar no começo do vídeo em vez de empurrar para dentro', () => {
+    // Encontrado no uso real: o player começa em 0, "Cortar aqui" ali criava um
+    // ponto em 0.05s e exportava uma parte de 50ms, deslocando as seguintes.
+    const antes: CutPoint[] = []
+    expect(addPoint(antes, 0, 100, 'novo')).toBe(antes)
+  })
+
+  it('recusa cortar no fim do vídeo pelo mesmo motivo', () => {
+    const antes: CutPoint[] = []
+    expect(addPoint(antes, 999, 100, 'novo')).toBe(antes)
+    expect(addPoint(antes, 100, 100, 'novo')).toBe(antes)
+  })
+
+  it('recusa dentro da faixa de MIN_GAP das duas bordas', () => {
+    const antes: CutPoint[] = []
+    expect(addPoint(antes, 0.05, 100, 'novo')).toBe(antes)
+    expect(addPoint(antes, 99.95, 100, 'novo')).toBe(antes)
+  })
+
+  it('aceita logo depois da faixa de borda', () => {
+    expect(addPoint([], 0.06, 100, 'novo')[0].time).toBe(0.06)
+  })
+
+  it('recusa tempo não finito', () => {
+    const antes: CutPoint[] = []
+    expect(addPoint(antes, NaN, 100, 'novo')).toBe(antes)
   })
 })
 
@@ -796,7 +819,16 @@ export function addPoint(
   duration: number,
   id: string,
 ): CutPoint[] {
-  const target = clampTime(time, duration)
+  // RECUSA em vez de limitar quando o pedido cai fora da faixa cortável. O
+  // `clampTime` é para o ARRASTO, onde o marcador precisa continuar vivo. Ao
+  // ADICIONAR, o começo e o fim já são fronteiras: pedir corte ali é pedido
+  // vazio, não pedido inválido. Limitar transformava "Cortar aqui" com o player
+  // em 0 — o clique mais provável do app — numa parte de 50ms que ainda deslocava
+  // todas as seguintes.
+  if (!Number.isFinite(time)) return points
+  if (time <= MIN_GAP || time >= round3(duration - MIN_GAP)) return points
+
+  const target = round3(time)
   if (points.some((p) => tooClose(p.time, target))) return points
   return [...points, { id, time: target }].sort(byTime)
 }

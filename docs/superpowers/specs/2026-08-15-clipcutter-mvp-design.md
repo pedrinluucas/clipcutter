@@ -159,8 +159,18 @@ Casos de borda definidos:
   (`última com 12.4s`).
 - Ponto arrastado para além de um vizinho ⇒ a lista reordena; se colar em
   outro (< 0.05s), colapsa.
-- Ponto arrastado para fora do vídeo ⇒ é limitado ao intervalo
-  `[0.05, duração − 0.05]`. Nunca vira segmento vazio nem tempo negativo.
+- Ponto **arrastado** para fora do vídeo ⇒ é limitado ao intervalo
+  `[0.05, duração − 0.05]`. O marcador continua vivo para poder ser trazido de
+  volta. Nunca vira segmento vazio nem tempo negativo.
+- Ponto **adicionado** (tecla `S` / "Cortar aqui") fora dessa faixa ⇒ é
+  **recusado**, não limitado. Corrigido em 15/08/2026 depois de aparecer no uso
+  real: o player começa parado em 0, então "Cortar aqui" ali é o clique mais
+  provável do app; limitar criava um ponto em 0.05s, exportava uma parte de 50ms
+  **e deslocava todas as seguintes** (a segunda saía com 29.95s em vez de 30s).
+  O erro de raciocínio original foi tratar "cortar em 0" como pedido inválido a
+  corrigir. Não é: o começo e o fim já são fronteiras implícitas, então o pedido é
+  vazio e a resposta honesta é não fazer nada. E o marcador espúrio era invisível,
+  porque o playhead branco fica em cima dele.
 
 ## 6. Reprodução do vídeo no player
 

@@ -125,9 +125,34 @@ describe('addPoint', () => {
     expect(addPoint(pts(59), 59.05, 100, 'novo')).toHaveLength(2)
   })
 
-  it('limita o ponto às bordas do vídeo', () => {
-    expect(addPoint([], 999, 100, 'novo')[0].time).toBe(99.95)
-    expect(addPoint([], 0, 100, 'novo')[0].time).toBe(0.05)
+  it('RECUSA cortar no começo do vídeo em vez de empurrar para dentro', () => {
+    // O player começa parado em 0, então "Cortar aqui" ali é o clique mais
+    // provável do app inteiro. Limitar transformava isso num ponto em 0.05s e
+    // exportava uma parte de 50ms — que ainda deslocava todas as seguintes.
+    // O começo do vídeo já é uma fronteira: pedir corte ali é pedido vazio.
+    const antes: CutPoint[] = []
+    expect(addPoint(antes, 0, 100, 'novo')).toBe(antes)
+  })
+
+  it('recusa cortar no fim do vídeo pelo mesmo motivo', () => {
+    const antes: CutPoint[] = []
+    expect(addPoint(antes, 999, 100, 'novo')).toBe(antes)
+    expect(addPoint(antes, 100, 100, 'novo')).toBe(antes)
+  })
+
+  it('recusa dentro da faixa de MIN_GAP das duas bordas', () => {
+    const antes: CutPoint[] = []
+    expect(addPoint(antes, 0.05, 100, 'novo')).toBe(antes)
+    expect(addPoint(antes, 99.95, 100, 'novo')).toBe(antes)
+  })
+
+  it('aceita logo depois da faixa de borda', () => {
+    expect(addPoint([], 0.06, 100, 'novo')[0].time).toBe(0.06)
+  })
+
+  it('recusa tempo não finito', () => {
+    const antes: CutPoint[] = []
+    expect(addPoint(antes, NaN, 100, 'novo')).toBe(antes)
   })
 })
 
