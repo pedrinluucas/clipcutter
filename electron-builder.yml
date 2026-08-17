@@ -27,6 +27,24 @@ asarUnpack:
 win:
   executableName: ClipCutter
 nsis:
+  # NÃO troque para `oneClick: false` enquanto o build for feito nesta máquina.
+  #
+  # O instalador com assistente é melhor — pergunta a pasta, pede confirmação, e
+  # num app sem assinatura isso conta a favor. Mas gerá-lo exige que o
+  # electron-builder EXECUTE um desinstalador temporário durante o build
+  # (`computeScriptAndSignUninstaller`), e o Smart App Control do Windows 11 barra
+  # esse .exe sem assinatura. O build morre com `spawn UNKNOWN` e deixa em `dist`
+  # um artefato de ~450 KB com cara de instalador.
+  #
+  # Verificado em 17/08/2026: o próprio Windows explicou — "não é possível
+  # confirmar quem publicou clipcutter-1.0.0-setup.exe que o aplicativo tentou
+  # carregar". O modo de um clique não precisa desse passo, por isso funciona.
+  #
+  # Caminhos para ter o assistente: build em CI (que não tem Smart App Control),
+  # ou assinar o app, ou desligar o Smart App Control — que é decisão de mão única,
+  # só reversível reinstalando o Windows.
+  oneClick: true
+  perMachine: false
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
