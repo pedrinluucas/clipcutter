@@ -32,9 +32,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      # `--ignore-scripts` pula o download dos binários do FFmpeg, que não são
-      # usados pelos testes (a lógica testada é pura) e custam ~150 MB por run.
-      - run: npm ci --ignore-scripts
+      # NÃO use `--ignore-scripts` aqui. Ele pula o download dos binários do
+      # FFmpeg, e três testes (`*.integration.test.ts`) executam ffmpeg e ffprobe
+      # de verdade — cortam um vídeo, matam o processo no meio, conferem o
+      # resultado com ffprobe. Sem os binários eles falham, e foi o que derrubou
+      # o primeiro run deste workflow.
+      - run: npm ci
       - run: npm run typecheck
       - run: npm test
 
