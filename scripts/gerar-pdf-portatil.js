@@ -63,13 +63,20 @@ const html = `<!doctype html>
 <ol>
   <li>Extraia o <span class="arq">.zip</span> onde quiser — área de trabalho, Documentos, um pen drive.</li>
   <li>Abra a pasta extraída.</li>
-  <li>Dê duplo-clique em <span class="arq">ClipCutter.cmd</span>.</li>
+  <li>Dê duplo-clique em <span class="arq">ClipCutter.exe</span>.</li>
 </ol>
 
 <div class="destaque">
-  <strong>Extraia a pasta inteira.</strong> O arquivo <span class="arq">ClipCutter.cmd</span>
-  precisa ficar ao lado da pasta <span class="arq">app</span>. Se você abrir o
-  <span class="arq">.cmd</span> de dentro do zip sem extrair, não funciona.
+  <strong>Extraia a pasta inteira antes de abrir.</strong> O
+  <span class="arq">ClipCutter.exe</span> precisa dos arquivos que estão ao lado dele.
+  Abrir direto de dentro do <span class="arq">.zip</span> não funciona — o Windows
+  copia só o executável para uma pasta temporária.
+</div>
+
+<div class="destaque">
+  <strong>O ícone do arquivo é o do Electron, não o do ClipCutter.</strong> Isso é
+  proposital, e é o que faz esta versão não ser bloqueada — a explicação está logo
+  abaixo. Depois de aberto, a janela e a barra de tarefas mostram o ícone certo.
 </div>
 
 <h2>Por que esta versão não é bloqueada</h2>
@@ -80,10 +87,18 @@ const html = `<!doctype html>
   inofensivo.
 </p>
 <p>
-  Esta versão contorna isso rodando através do <span class="arq">electron.exe</span>,
-  um componente presente em milhares de programas conhecidos (Discord, VS Code,
-  Slack) e que o Windows já reconhece. <strong>O programa é exatamente o mesmo do
-  instalador</strong> — muda só quem o carrega.
+  O <span class="arq">ClipCutter.exe</span> desta pasta é o
+  <span class="arq">electron.exe</span> original — o mesmo componente que roda dentro
+  do Discord, do VS Code e do Slack — apenas <strong>renomeado</strong>. Renomear não
+  altera um byte do conteúdo, então para o Windows continua sendo aquele arquivo que
+  ele já viu em milhões de máquinas. É essa familiaridade que libera a execução.
+</p>
+<p>
+  <strong>O programa é exatamente o mesmo do instalador.</strong> Ele vive no
+  <span class="arq">resources\\app.asar</span>, ao lado do executável; muda só quem o
+  carrega. E é por isso que o ícone do arquivo é o do Electron: pintar o ícone do
+  ClipCutter por cima reescreveria o executável, criando um arquivo inédito — de
+  volta ao bloqueio.
 </p>
 
 <h2>Como usar</h2>
