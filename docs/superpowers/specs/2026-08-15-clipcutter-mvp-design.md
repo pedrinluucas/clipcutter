@@ -193,13 +193,37 @@ O `<video>` do renderer **não consegue abrir `file:///C:/...`** — o Electron
 bloqueia por segurança quando a UI roda em `localhost`, que é o caso em
 desenvolvimento.
 
-Solução: o main registra o protocolo `clip://` com `protocol.handle()`,
-servindo o arquivo do disco via `net.fetch(pathToFileURL(caminho))`, que já
-traz suporte a *Range* — necessário para arrastar a barra de progresso sem
-carregar o arquivo inteiro na memória.
+Solução: o main registra o protocolo `clip://` com `protocol.handle()` e serve o
+arquivo do disco.
 
-São ~15 linhas, mas sem isso o app abre com tela preta e nenhuma mensagem de
-erro. Vale registrar como decisão explícita.
+> **CORREÇÃO — 15/08/2026.** Este parágrafo dizia que bastava
+> `net.fetch(pathToFileURL(caminho))` porque isso *"já traz suporte a Range"*.
+> **É falso.** Medido com sonda em Electron real: um pedido de 1.000 bytes
+> devolve **200 com o arquivo inteiro** (911 MB), sem `accept-ranges`.
+>
+> Sem *Range* o `<video>` toca do começo ao fim mas **não consegue posicionar** —
+> clicar na timeline, arrastar o playhead e as setas do teclado ficam todos
+> inertes. O usuário descreveu como "a agulha travou". Nunca funcionou desde a
+> Task 12.
+>
+> A afirmação atravessou 15 tasks, a revisão de cada uma e a revisão da branch
+> inteira sem ser questionada, porque verificá-la exige runtime de Electron — e
+> nenhum agente do processo conseguia abrir janela (ver §Ambiente). Foi eu
+> afirmando um detalhe técnico sem medir, e o processo herdando a afirmação.
+
+O handler implementa *Range* ele mesmo: lê `Range` da requisição, responde **206**
+com `Content-Range`, `Content-Length` e o pedaço pedido; sem `Range`, responde
+**200** com `Accept-Ranges: bytes` — é esse cabeçalho que **anuncia** ao player
+que ele pode pedir pedaços. Faixa fora do arquivo vira **416** com
+`Content-Range: bytes */tamanho`, senão o player não sabe para onde corrigir.
+
+Suporta o pedido por **sufixo** (`bytes=-500`), que é como o player lê o índice de
+um MP4 — ele fica no fim do arquivo, e sem isso o vídeo pode nem abrir.
+
+- Interpretação do cabeçalho: `src/main/rangeRequest.ts`, 16 testes.
+- Mecanismo ponta a ponta: `npm run probe:range -- "caminho\do\video.mp4"`.
+  Existe porque nenhum teste automatizado deste projeto alcança um `protocol.handle`
+  montado num Electron real.
 
 ## 7. Exportação
 

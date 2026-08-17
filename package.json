@@ -19,7 +19,8 @@
     "build:mac": "electron-vite build && electron-builder --mac",
     "build:linux": "electron-vite build && electron-builder --linux",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "probe:range": "electron scripts/probe-range.js"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
