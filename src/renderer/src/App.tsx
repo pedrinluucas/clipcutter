@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FfmpegCheck, VideoInfo } from '@shared/types'
+import { generateTimesByDuration } from '@shared/cutPoints'
 import { WelcomeScreen } from './components/WelcomeScreen'
 import { FileInfo } from './components/FileInfo'
 import { FfmpegMissing } from './components/FfmpegMissing'
@@ -18,6 +19,15 @@ function Editor({ video, onReset }: { video: VideoInfo; onReset: () => void }): 
   const cuts = useCutPoints(video.duration)
   const exp = useExport(video, cuts.segments)
   const [chunk, setChunk] = useState(30)
+
+  // Prévia dos cortes: onde eles CAIRIAM se "Gerar cortes" fosse clicado agora.
+  // É a mesma função pura que o botão usa, então prévia e resultado não podem
+  // divergir. Memoizado porque o Editor redesenha ~60x/s por causa do playhead —
+  // sem isto, o array seria recalculado a cada quadro.
+  const previewTimes = useMemo(
+    () => generateTimesByDuration(chunk, video.duration),
+    [chunk, video.duration],
+  )
   const saveChunkTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -94,6 +104,7 @@ function Editor({ video, onReset }: { video: VideoInfo; onReset: () => void }): 
         <Timeline
           video={video}
           points={cuts.points}
+          previewTimes={previewTimes}
           currentTime={player.currentTime}
           onSeek={player.seek}
           onDragPoint={cuts.drag}

@@ -5,6 +5,12 @@ import { formatTime } from '@shared/time'
 type Props = {
   video: VideoInfo
   points: CutPoint[]
+  /**
+   * Onde os cortes CAIRIAM se "Gerar cortes" fosse clicado agora. É prévia, não
+   * estado: vem de um cálculo puro sobre a duração escolhida e nunca toca a lista
+   * de pontos, então mexer no slider não pode apagar marcador nenhum.
+   */
+  previewTimes: number[]
   currentTime: number
   onSeek: (time: number) => void
   onDragPoint: (id: string, time: number) => void
@@ -13,6 +19,11 @@ type Props = {
 }
 
 const TICK_TARGET_PX = 90
+
+// Acima disto a prévia não é desenhada. Com o slider em 1s num vídeo de uma hora
+// seriam 3.600 fantasmas, e a timeline redesenha ~60x/s por causa do playhead —
+// arrastar o slider engasgaria. Os marcadores de verdade continuam aparecendo.
+const MAX_PREVIEW_MARKERS = 300
 
 function tickStep(duration: number, widthPx: number): number {
   const candidates = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800]
@@ -23,6 +34,7 @@ function tickStep(duration: number, widthPx: number): number {
 export function Timeline({
   video,
   points,
+  previewTimes,
   currentTime,
   onSeek,
   onDragPoint,
@@ -89,6 +101,21 @@ export function Timeline({
             className="pointer-events-none absolute top-0 h-2 w-px bg-[#e7e7f0]/20"
           />
         ))}
+
+        {/*
+          Fantasmas da prévia. Vêm ANTES dos marcadores reais no DOM, então quando
+          você clica em "Gerar cortes" os de verdade cobrem os fantasmas nas mesmas
+          posições, sem piscar nem parecer duplicado. Sem alça no topo de propósito:
+          a alça é o que se arrasta, e fantasma não se arrasta.
+        */}
+        {previewTimes.length <= MAX_PREVIEW_MARKERS &&
+          previewTimes.map((t) => (
+            <div
+              key={`preview-${t}`}
+              style={{ left: percent(t) }}
+              className="pointer-events-none absolute top-0 h-full border-l border-dashed border-[#ff6b35]/30"
+            />
+          ))}
 
         {points.map((point) => (
           <div

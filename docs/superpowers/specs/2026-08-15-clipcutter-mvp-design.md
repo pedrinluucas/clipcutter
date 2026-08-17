@@ -54,6 +54,13 @@ que aprender IPC.
 6. **Pontos de corte**
    - "Gerar a cada X segundos": input numérico + slider (1.0s até a duração
      total, passo 0.1s)
+   - **Prévia ao vivo na timeline** (acrescentado em 15/08/2026, depois do MVP):
+     enquanto a duração muda, marcadores tracejados apagados mostram onde os
+     cortes cairiam. É cálculo na hora de desenhar, não estado — usa a mesma
+     função pura do botão, então prévia e resultado não divergem, e mexer no
+     slider não pode apagar marcador nenhum. Só viram cortes de verdade ao
+     clicar "Gerar cortes". Acima de 300 marcadores a prévia não é desenhada
+     (slider em 1s num vídeo de 1h daria 3.600, e a timeline redesenha ~60x/s).
    - "Cortar aqui": marca na posição atual do player
    - Arrastar marcador na timeline; apagar marcador
    - Contador ao vivo: `6 partes · última com 12.4s`
