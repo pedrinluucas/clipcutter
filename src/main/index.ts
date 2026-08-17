@@ -1,6 +1,7 @@
 import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import icon from '../../resources/icon.png?asset'
 import { registerClipScheme, handleClipProtocol } from './protocol'
 import { registerIpc, cancelCurrentJob } from './ipc'
 
@@ -15,6 +16,12 @@ function createWindow(): void {
     minHeight: 750,
     show: false,
     backgroundColor: '#0f0f1a',
+    // O template só aplicava isto no Linux, porque no Windows e no macOS o ícone
+    // do executável empacotado já resolve. Mas em DESENVOLVIMENTO quem executa é o
+    // `electron.exe`, então a janela e a barra de tarefas mostram o logo do
+    // Electron — foi o que o Pedro viu. Aplicar em todas as plataformas faz o
+    // `npm start` parecer o app de verdade; no pacote é redundante e inofensivo.
+    icon,
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
