@@ -293,8 +293,15 @@ ou clique para importar".
 no gerador.
 
 Na primeira execução (sem nada salvo): "corte exato" **ligado**, duração
-padrão **30.0s**, pasta de saída vazia — pedida antes da primeira exportação.
+padrão **29.9s**, pasta de saída vazia — pedida antes da primeira exportação.
 Depois disso vale sempre o último valor usado.
+
+O padrão era 30.0 e foi corrigido em 15/08/2026 com evidência da plataforma: o
+Facebook Stories diz "up to 30 seconds" e **recusa** um arquivo de 30,000s exatos
+com "Video is too long"; o mesmo vídeo a 29,9s passa inteiro. "Até 30" ali
+significa menos que 30. 29.9 também evita uma segunda armadilha: num vídeo de
+29,97fps, pedir 30,000s produz 30,03s, porque o quadro 900 começa em 29,9967 —
+antes do corte — e entra.
 
 ## 12. Critérios de sucesso do MVP
 
