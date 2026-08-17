@@ -146,8 +146,31 @@ Electron (estável mais recente) · React 19 + TypeScript · Tailwind CSS v4 ·
 Lucide React · electron-store · Vitest · scaffold via `electron-vite`
 (template `react-ts`).
 
-FFmpeg e FFprobe vêm do PATH do sistema — já instalados via winget. Nada
-embutido no v1.
+> **MUDOU em 17/08/2026 — FFmpeg agora vem EMBUTIDO.**
+>
+> Era do PATH do sistema. Passou a vir dentro do pacote (`ffmpeg-static` +
+> `@ffprobe-installer/ffprobe`), por dois motivos: quem receber o `.exe` não
+> precisa instalar nada, e a versão fica presa à do app — antes o comportamento
+> dependia de qual FFmpeg estava na máquina, e uma atualização que mudasse o
+> formato de `-progress` quebraria o progresso em silêncio.
+>
+> **A armadilha (item 5 das correções, §13):** o sistema operacional não executa
+> binário de dentro do `app.asar`. O `electron-builder.yml` os deixa de fora via
+> `asarUnpack`, e `src/main/ffmpeg/binaries.ts` reescreve o caminho
+> `app.asar` → `app.asar.unpacked`. **As duas metades andam juntas**: mexer numa
+> sem a outra quebra só no `.exe`, nunca em desenvolvimento. A reescrita tem 6
+> testes; a cadeia completa foi verificada contra o pacote gerado.
+>
+> Escolha de pacote: `ffprobe-static` traz um build de **2018**, velho demais e
+> descasado do ffmpeg de 2023. `@ffprobe-installer/ffprobe` traz um build de 2023
+> da mesma família (gyan). Custo: ~156 MB de binários, instalador final de 134 MB.
+>
+> Consequência na UI: a tela de falha deixou de dizer "instale com winget" — não
+> há nada para o usuário instalar, e se o FFmpeg embutido não responde é a
+> instalação do app que está corrompida (antivírus, tipicamente).
+
+FFmpeg e FFprobe vêm **embutidos no pacote**. Em desenvolvimento o `npm start`
+usa os mesmos binários, então dev e produção exercitam a mesma coisa.
 
 ## 5. Modelo de dados
 

@@ -1,18 +1,31 @@
-appId: com.electron.app
+appId: com.pedrolucas.clipcutter
 productName: ClipCutter
 directories:
   buildResources: build
 files:
   - '!**/.vscode/*'
   - '!src/*'
+  - '!scripts/*'
+  - '!docs/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
-  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json,vitest.config.ts}'
+
+# O sistema operacional NÃO consegue executar um binário de dentro do app.asar.
+# Sem estas duas linhas o app empacotado sobe normalmente e falha na primeira
+# tentativa de cortar — o clássico "funciona em dev, quebra no .exe". Estava
+# previsto na lista de correções do spec original (item 5) desde o começo.
+#
+# O código compensa o desvio reescrevendo o caminho (src/main/ffmpeg/binaries.ts).
+# As duas metades andam juntas: mexer aqui sem mexer lá quebra silenciosamente.
 asarUnpack:
   - resources/**
+  - node_modules/ffmpeg-static/**
+  - node_modules/@ffprobe-installer/**
+
 win:
-  executableName: tmp-scaffold
+  executableName: ClipCutter
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
@@ -21,23 +34,16 @@ nsis:
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
-    - NSCameraUsageDescription: Application requests access to the device's camera.
-    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    - NSDocumentsFolderUsageDescription: O ClipCutter precisa ler os vídeos que você escolher.
+    - NSDownloadsFolderUsageDescription: O ClipCutter precisa salvar as partes na pasta que você escolher.
   notarize: false
 dmg:
   artifactName: ${name}-${version}.${ext}
 linux:
   target:
     - AppImage
-    - snap
-    - deb
-  maintainer: electronjs.org
-  category: Utility
+  maintainer: pedrolucasdig@gmail.com
+  category: AudioVideo
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
-publish:
-  provider: generic
-  url: https://example.com/auto-updates
