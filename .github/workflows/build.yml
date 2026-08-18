@@ -108,6 +108,28 @@ jobs:
       # daqui e, no Mac do Pedro, subia e morria sozinho sem escrever uma linha.
       # O runner do macOS é um Mac de verdade: se o app não fica de pé aqui, o
       # build falha e ninguém baixa um instalador quebrado.
+      # CONTROLE DO EXPERIMENTO. Antes de julgar o ClipCutter, provar que um app
+      # Electron QUALQUER abre neste runner. Se nem o minimo abrir, o teste
+      # abaixo esta medindo o ambiente -- e as rodadas #10 a #18 interrogaram a
+      # testemunha errada.
+      - name: um Electron minimo abre aqui?
+        run: |
+          set +e
+          mkdir -p /tmp/mini
+          printf '{"name":"mini","version":"1.0.0","main":"m.js"}' > /tmp/mini/package.json
+          printf 'const {app}=require("electron");app.whenReady().then(()=>{require("fs").writeFileSync("/tmp/mini-abriu","ok")})' > /tmp/mini/m.js
+          rm -f /tmp/mini-abriu
+          node_modules/electron/dist/Electron.app/Contents/MacOS/Electron /tmp/mini > /tmp/mini.log 2>&1 &
+          MPID=$!
+          sleep 15
+          kill $MPID 2>/dev/null
+          if [ -f /tmp/mini-abriu ]; then
+            echo "CONTROLE OK: Electron minimo abre neste runner"
+          else
+            SAIDA_MINI=$(cat /tmp/mini.log | tr '[:space:]' ' ' | tr -s ' ' | tail -c 900)
+            echo "::error title=nem o Electron minimo abre neste runner::[${SAIDA_MINI:-sem saida}] -- o teste do ClipCutter esta medindo o AMBIENTE, nao o app"
+          fi
+
       - name: o app abre?
         run: |
           APP=$(find dist -maxdepth 3 -name 'ClipCutter.app' -print -quit)
