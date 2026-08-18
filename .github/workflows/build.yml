@@ -262,24 +262,43 @@ jobs:
       #
       # A tentativa anterior de extrair falhou em silencio (o `node -p` seguinte
       # devolveu o rodape de um erro), entao cada passo aqui e conferido.
-      - name: o que tem dentro do asar?
+      # O asar esta completo (run #29: 4922 itens, out/main/index.js presente).
+      # Entao o Electron tem tudo e mesmo assim desiste.
+      #
+      # BISSECAO DEFINITIVA: trocar o conteudo do asar por um "ola mundo" e rodar
+      # O MESMO bundle empacotado. Isola as duas ultimas possibilidades sem
+      # depender de nenhum sinal indireto:
+      #   - se o minimo roda -> o bundle esta bom, o defeito e o MEU CODIGO
+      #   - se nem o minimo roda -> o defeito e o BUNDLE
+      - name: um ola-mundo roda dentro do nosso bundle?
         run: |
           set +e
           APP=$(find dist -maxdepth 3 -name 'ClipCutter.app' -print -quit)
-          ASAR="$APP/Contents/Resources/app.asar"
-          EL=node_modules/electron/dist/Electron.app/Contents/MacOS/Electron
+          cp -R "$APP" /tmp/Cobaia.app
 
-          npx --yes @electron/asar list "$ASAR" > /tmp/lista.txt 2>/tmp/lista-erro.txt
-          TOTAL=$(wc -l < /tmp/lista.txt | tr -d ' ')
-          ERRO_LISTA=$(tail -c 200 /tmp/lista-erro.txt)
-          RAIZ=$(grep -E '^/[^/]+$' /tmp/lista.txt | head -12 | tr '[:space:]' ' ')
-          TEM_MAIN=$(grep -c '/out/main/index.js' /tmp/lista.txt)
-          TEM_RENDERER=$(grep -c '/out/renderer/index.html' /tmp/lista.txt)
+          mkdir -p /tmp/ola
+          printf '{"name":"ola","version":"1.0.0","main":"m.js"}' > /tmp/ola/package.json
+          printf 'require("fs").writeFileSync("/tmp/ola-rodou","ok");const{app}=require("electron");app.whenReady().then(()=>{require("fs").appendFileSync("/tmp/ola-rodou"," pronto")})' > /tmp/ola/m.js
 
-          npx --yes @electron/asar extract-file "$ASAR" package.json > /tmp/pkg.json 2>/dev/null
-          MAIN=$(node -p "JSON.parse(require('fs').readFileSync('/tmp/pkg.json','utf8')).main" 2>&1 | tail -1)
+          npx --yes @electron/asar pack /tmp/ola /tmp/ola.asar 2>&1 | tail -2
+          cp /tmp/ola.asar /tmp/Cobaia.app/Contents/Resources/app.asar
+          rm -rf /tmp/Cobaia.app/Contents/Resources/app.asar.unpacked
+          codesign -fs - --deep /tmp/Cobaia.app 2>/dev/null
 
-          echo "::error title=conteudo do asar::ITENS=[$TOTAL] ERRO=[${ERRO_LISTA:-nenhum}] RAIZ=[${RAIZ:-vazia}] TEM_MAIN=[$TEM_MAIN] TEM_RENDERER=[$TEM_RENDERER] MAIN_DECLARADO=[${MAIN:-?}]"
+          rm -f /tmp/ola-rodou
+          /tmp/Cobaia.app/Contents/MacOS/ClipCutter > /tmp/ola.log 2>&1 &
+          OPID=$!
+          sleep 15
+          kill $OPID 2>/dev/null
+
+          RODOU=$(cat /tmp/ola-rodou 2>/dev/null)
+          SAI=$(cat /tmp/ola.log | tr '[:space:]' ' ' | tr -s ' ' | tail -c 600)
+
+          if [ -n "$RODOU" ]; then
+            echo "::error title=VEREDITO: o bundle esta bom, o defeito e o meu codigo::ola-mundo rodou dentro do bundle empacotado [$RODOU]"
+          else
+            echo "::error title=VEREDITO: nem o ola-mundo roda -- o defeito e o BUNDLE::SAIDA=[${SAI:-vazia}]"
+          fi
 
       - name: o app abre?
         run: |
