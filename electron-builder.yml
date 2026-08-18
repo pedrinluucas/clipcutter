@@ -63,6 +63,18 @@ mac:
   # desenvolvedor nao identificado" e exige botao direito > Abrir na primeira vez.
   # A diferenca e entre "abre com aviso" e "nao abre de jeito nenhum".
   identity: '-'
+  # DESLIGADO de proposito. O hardened runtime da Apple e uma tranca que so abre
+  # com notarizacao -- e notarizar exige conta paga de desenvolvedor.
+  #
+  # Com ele LIGADO e assinatura ad-hoc, o app morre antes de existir, calado: o
+  # runtime valida cada biblioteca carregada, as bibliotecas do Electron estao
+  # assinadas ad-hoc (sem identidade de time), a validacao recusa, e o processo
+  # some sem log, sem dialogo, sem uma linha de saida. Foi o defeito da v1.0.0 --
+  # `flags=0x10002(adhoc,runtime)` no `codesign -dv` do run #14 foi o que
+  # finalmente mostrou o `runtime` ali.
+  #
+  # Ligar de novo SO faz sentido junto com certificado da Apple e notarizacao.
+  hardenedRuntime: false
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSDocumentsFolderUsageDescription: O ClipCutter precisa ler os vídeos que você escolher.

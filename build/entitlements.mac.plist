@@ -8,5 +8,11 @@
     <true/>
     <key>com.apple.security.cs.allow-dyld-environment-variables</key>
     <true/>
+    <!-- Sem isto, o hardened runtime recusa carregar as bibliotecas do Electron
+         quando elas estao assinadas ad-hoc, e o app morre em silencio. Hoje o
+         hardened runtime esta desligado (electron-builder.yml), mas se um dia
+         for ligado para notarizar, esta linha precisa estar aqui. -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
   </dict>
 </plist>
