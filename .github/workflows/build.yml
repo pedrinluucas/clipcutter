@@ -137,11 +137,17 @@ jobs:
             # TUDO vai para a anotacao, que e publica. O log do job exige
             # autenticacao: nos runs #11 a #13 eu coletei diagnostico e o deixei
             # num lugar que nao consigo ler, perdendo duas rodadas.
+            # Duas sondas que separam "o binario do Electron nao roda" de "o
+            # meu codigo quebra". A primeira usa o proprio executavel como Node
+            # puro; a segunda pede so a versao. Se AS DUAS falharem, o problema
+            # esta no pacote e nao em nada que eu escrevi.
+            SONDA_NODE=$(ELECTRON_RUN_AS_NODE=1 "$BIN" -e "process.stdout.write('node-ok')" 2>&1 | tail -c 200)
+            SONDA_VER=$("$BIN" --version 2>&1 | tail -c 200)
             SAIDA=$(cat saida-do-app.log | tr '[:space:]' ' ' | tr -s ' ' | tail -c 700)
             DIARIO_TXT=$(cat "$DIARIO" 2>/dev/null | tr '[:space:]' ' ' | tr -s ' ' | tail -c 500)
             ASSIN=$(codesign -dv --verbose=2 "$APP" 2>&1 | tr '[:space:]' ' ' | tr -s ' ' | tail -c 400)
             SISLOG=$(log show --last 3m --predicate 'eventMessage CONTAINS "ClipCutter"' --info 2>/dev/null | grep -iE "signature|denied|invalid|taskgated|trust|Library not loaded|kill" | tail -6 | tr '[:space:]' ' ' | tr -s ' ' | tail -c 800)
-            echo "::error title=o app fecha sozinho no macOS (codigo $CODIGO)::SAIDA=[${SAIDA:-vazia}] DIARIO=[${DIARIO_TXT:-vazio}] ASSINATURA=[${ASSIN:-nao lida}] SISTEMA=[${SISLOG:-nada}]"
+            echo "::error title=o app fecha sozinho no macOS (codigo $CODIGO)::SAIDA=[${SAIDA:-vazia}] DIARIO=[${DIARIO_TXT:-vazio}] ASSINATURA=[${ASSIN:-nao lida}] SONDA_NODE=[${SONDA_NODE:-vazia}] SONDA_VERSAO=[${SONDA_VER:-vazia}] SISTEMA=[${SISLOG:-nada}]"
             exit 1
           fi
       - if: always()

@@ -1,40 +1,19 @@
+// O diário PRECISA ser o primeiro import: os módulos importados executam antes
+// da primeira linha deste arquivo, então qualquer registro escrito aqui embaixo
+// só prova que TODOS os imports sobreviveram. Sendo o primeiro, ele separa "o
+// Electron não subiu" de "um dos meus módulos explodiu ao carregar".
+import { boot, BOOT_LOG } from './diario'
 import { app, shell, BrowserWindow, dialog } from 'electron'
 import { join } from 'path'
-import { appendFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+boot('electron e toolkit carregados')
 import icon from '../../resources/icon.png?asset'
 import { registerClipScheme, handleClipProtocol } from './protocol'
 import { registerIpc, cancelCurrentJob } from './ipc'
 
-// DIÁRIO DE INICIALIZAÇÃO
-//
-// Em 18/08/2026 o app subiu no macOS e saiu sozinho, sem janela e sem UMA LINHA
-// em lugar nenhum: nada no terminal, nada com ELECTRON_ENABLE_LOGGING=1, nenhum
-// relatório de falha. O log do sistema só dizia `"ClipCutter"(quitting)` — saída
-// limpa e deliberada. Diagnosticar isso custou uma dezena de idas e vindas com o
-// Pedro no Terminal do Mac dele, e mesmo assim não fechou.
-//
-// Um app de desktop que morre calado não é depurável à distância. Este diário
-// existe para que a próxima falha se explique sozinha: fica em TMPDIR, que é
-// sempre gravável (o diretório de dados do app pode nem ter sido criado ainda —
-// foi exatamente o caso), e cada etapa da subida deixa sua marca.
-const BOOT_LOG = join(tmpdir(), 'clipcutter-boot.log')
-
-function boot(etapa: string): void {
-  const linha = `${new Date().toISOString()}  ${etapa}\n`
-  // `console.error` para quem roda pelo terminal; o arquivo para quem abriu com
-  // dois cliques e não tem terminal nenhum.
-  console.error('[boot]', etapa)
-  try {
-    appendFileSync(BOOT_LOG, linha)
-  } catch {
-    // Um diário que quebra o app que ele deveria diagnosticar seria pior que
-    // não existir.
-  }
-}
-
-boot(`inicio  versao=${app.getVersion()}  plataforma=${process.platform}  arch=${process.arch}`)
+boot(
+  `imports concluidos  versao=${app.getVersion()}  plataforma=${process.platform}  arch=${process.arch}`
+)
 
 registerClipScheme()
 boot('protocolo clip:// registrado')
