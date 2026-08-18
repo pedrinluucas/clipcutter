@@ -80,6 +80,18 @@ mac:
     - NSDocumentsFolderUsageDescription: O ClipCutter precisa ler os vídeos que você escolher.
     - NSDownloadsFolderUsageDescription: O ClipCutter precisa salvar as partes na pasta que você escolher.
   notarize: false
+# O electron-builder grava um SHA256 do app.asar no Info.plist
+# (ElectronAsarIntegrity) e o Electron confere antes de carregar o pacote. Se nao
+# bater, ele RECUSA EM SILENCIO -- sem log, sem dialogo, sem saida. E o sintoma
+# exato do app no macOS: o processo sobe, conecta ao CoreAnalytics, executa uma
+# saida limpa, e nada do meu codigo roda.
+#
+# Desligado enquanto a causa nao esta confirmada. A validacao so protege contra
+# alguem adulterar o app.asar DEPOIS de instalado -- ameaca irrelevante num app
+# que ja nao tem assinatura da Apple para ser adulterada.
+electronFuses:
+  enableEmbeddedAsarIntegrityValidation: false
+  onlyLoadAppFromAsar: false
 dmg:
   artifactName: ${name}-${version}.${ext}
 linux:

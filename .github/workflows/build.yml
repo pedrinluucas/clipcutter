@@ -149,14 +149,18 @@ jobs:
             # Sem grep por palavra-chave: as tentativas anteriores filtravam por
             # "signature|denied|invalid" e so devolviam ruido do LaunchServices.
             # O que o PROPRIO processo registrou e o que interessa.
-            SISLOG=$(log show --last 3m --predicate 'process == "ClipCutter"' --info --debug 2>/dev/null | tail -12 | tr '[:space:]' ' ' | tr -s ' ' | tail -c 900)
+            # `head`, nao `tail`: o run #17 capturou as ultimas linhas e so viu o
+            # encerramento (CoreAnalytics cancelando XPC). O motivo esta no COMECO.
+            log show --last 3m --predicate 'process == "ClipCutter"' --info --debug > log-processo.txt 2>/dev/null || true
+            SISLOG=$(head -14 log-processo.txt | tr '[:space:]' ' ' | tr -s ' ' | tail -c 700)
+            PISTA=$(grep -iE "asar|integrity|fatal|fuse|cannot|unable|fail" log-processo.txt | head -5 | tr '[:space:]' ' ' | tr -s ' ' | tail -c 600)
             # O diario tambem e escrito em /tmp: um app empacotado no macOS tem
             # TMPDIR proprio, num conteiner privado.
             DIARIO_TMP=$(cat /tmp/clipcutter-boot.log 2>/dev/null | tr '[:space:]' ' ' | tr -s ' ' | tail -c 400)
             # A integridade do asar vive no Info.plist. Se o Electron recusar o
             # pacote por causa dela, sai calado -- e o sintoma seria este.
             INTEG=$(plutil -p "$APP/Contents/Info.plist" 2>/dev/null | grep -iA4 integrity | tr '[:space:]' ' ' | tr -s ' ' | tail -c 300)
-            echo "::error title=o app fecha sozinho no macOS (codigo $CODIGO)::SAIDA=[${SAIDA:-vazia}] DIARIO=[${DIARIO_TXT:-vazio}] ASSINATURA=[${ASSIN:-nao lida}] SONDA_NODE=[${SONDA_NODE:-vazia}] SONDA_VERSAO=[${SONDA_VER:-vazia}] DIARIO_TMP=[${DIARIO_TMP:-vazio}] INTEGRIDADE=[${INTEG:-ausente}] SISTEMA=[${SISLOG:-nada}]"
+            echo "::error title=o app fecha sozinho no macOS (codigo $CODIGO)::SAIDA=[${SAIDA:-vazia}] DIARIO=[${DIARIO_TXT:-vazio}] ASSINATURA=[${ASSIN:-nao lida}] SONDA_NODE=[${SONDA_NODE:-vazia}] SONDA_VERSAO=[${SONDA_VER:-vazia}] DIARIO_TMP=[${DIARIO_TMP:-vazio}] INTEGRIDADE=[${INTEG:-ausente}] SISTEMA_INICIO=[${SISLOG:-nada}] PISTAS=[${PISTA:-nenhuma}]"
             exit 1
           fi
       - if: always()
