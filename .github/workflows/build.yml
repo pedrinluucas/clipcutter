@@ -134,14 +134,14 @@ jobs:
           else
             wait $PID
             CODIGO=$?
-            echo '--- saida do app ---'; cat saida-do-app.log
-            echo '--- assinatura ---'
-            codesign -dv --verbose=2 "$APP" 2>&1 | head -12
-            echo '--- o que o sistema anotou ---'
-            log show --last 2m --predicate 'eventMessage CONTAINS "ClipCutter"' --info 2>/dev/null | grep -iE "signature|denied|kill|invalid|taskgated|trust" | head -10
-            echo '--- diario ---'; cat "$DIARIO" 2>/dev/null || echo '(vazio)'
-            SAIDA=$(tr '\n' ' ' < saida-do-app.log | tr -s ' ' | tail -c 1400)
-            echo "::error title=o app fecha sozinho no macOS (codigo $CODIGO)::${SAIDA:-sem saida nenhuma; diario: $(tr '\n' ' ' < "$DIARIO" 2>/dev/null | tail -c 400)}"
+            # TUDO vai para a anotacao, que e publica. O log do job exige
+            # autenticacao: nos runs #11 a #13 eu coletei diagnostico e o deixei
+            # num lugar que nao consigo ler, perdendo duas rodadas.
+            SAIDA=$(cat saida-do-app.log | tr '[:space:]' ' ' | tr -s ' ' | tail -c 700)
+            DIARIO_TXT=$(cat "$DIARIO" 2>/dev/null | tr '[:space:]' ' ' | tr -s ' ' | tail -c 500)
+            ASSIN=$(codesign -dv --verbose=2 "$APP" 2>&1 | tr '[:space:]' ' ' | tr -s ' ' | tail -c 400)
+            SISLOG=$(log show --last 3m --predicate 'eventMessage CONTAINS "ClipCutter"' --info 2>/dev/null | grep -iE "signature|denied|invalid|taskgated|trust|Library not loaded|kill" | tail -6 | tr '[:space:]' ' ' | tr -s ' ' | tail -c 800)
+            echo "::error title=o app fecha sozinho no macOS (codigo $CODIGO)::SAIDA=[${SAIDA:-vazia}] DIARIO=[${DIARIO_TXT:-vazio}] ASSINATURA=[${ASSIN:-nao lida}] SISTEMA=[${SISLOG:-nada}]"
             exit 1
           fi
       - if: always()
