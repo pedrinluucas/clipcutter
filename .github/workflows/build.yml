@@ -228,6 +228,24 @@ jobs:
           CONTEUDO=$(cat $(echo $ACHADO | awk '{print $1}') 2>/dev/null | tr '[:space:]' ' ' | tr -s ' ' | tail -c 600)
           echo "::error title=o que o Chromium disse::VERBOSO=[${VERB:-vazio}] ARQUIVO_LOG=[${ACHADO:-nenhum}] CONTEUDO=[${CONTEUDO:-vazio}]"
 
+      # O log verboso do run #23 termina em "Displays updated" e o processo acaba:
+      # o Chromium sobe inteiro e morre no passo seguinte, que e carregar o app.
+      #
+      # Fuses sao interruptores gravados DENTRO do binario do Electron. Um deles,
+      # EnableEmbeddedAsarIntegrityValidation, faz o Electron conferir o hash do
+      # app.asar antes de carregar -- e recusar em silencio se nao bater. Remover
+      # a chave do Info.plist (run #21) nao ajudou, e isso e coerente: sem dado
+      # nenhum para conferir, a validacao falha do mesmo jeito.
+      #
+      # Eu declarei os fuses no electron-builder.yml, mas nunca verifiquei se
+      # foram MESMO aplicados. Esta ferramenta le o estado real.
+      - name: quais fuses estao ligados de verdade?
+        run: |
+          set +e
+          APP=$(find dist -maxdepth 3 -name 'ClipCutter.app' -print -quit)
+          FUSES=$(npx --yes @electron/fuses read --app "$APP" 2>&1 | tr '[:space:]' ' ' | tr -s ' ' | tail -c 900)
+          echo "::error title=estado real dos fuses::${FUSES:-nao consegui ler}"
+
       - name: o app abre?
         run: |
           APP=$(find dist -maxdepth 3 -name 'ClipCutter.app' -print -quit)
