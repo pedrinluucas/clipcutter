@@ -135,35 +135,30 @@ jobs:
       # empacotamento. Rodar o NOSSO app.asar pelo Electron ORIGINAL separa os
       # dois -- e, se for o codigo, o Electron original IMPRIME o erro, coisa que
       # o app empacotado nunca fez em nove rodadas.
+      # BISSECAO, REFEITA. A versao anterior concluia "o codigo roda" so porque o
+      # processo continuava vivo apos 18s -- mas o Electron original, quando NAO
+      # consegue carregar um app, abre a janela de boas-vindas dele e fica vivo
+      # igual. O criterio nao distinguia sucesso de fracasso, e a conclusao do
+      # run #20 ("codigo inocente, culpa do empacotamento") pode ter sido falsa.
+      #
+      # Agora quem decide e o DIARIO: se ele tem linhas, o nosso codigo rodou.
       - name: nosso codigo roda no Electron original?
         run: |
           set +e
           APP=$(find dist -maxdepth 3 -name 'ClipCutter.app' -print -quit)
           rm -f /tmp/clipcutter-boot.log
-          node_modules/electron/dist/Electron.app/Contents/MacOS/Electron             "$APP/Contents/Resources/app.asar" > /tmp/asar-solto.log 2>&1 &
+          node_modules/electron/dist/Electron.app/Contents/MacOS/Electron "$APP/Contents/Resources/app.asar" > /tmp/asar-solto.log 2>&1 &
           APID=$!
           sleep 18
-          if kill -0 $APID 2>/dev/null; then
-            kill $APID 2>/dev/null
-            echo "ABRIU -- o codigo esta so; o defeito e do EMPACOTAMENTO"
-            echo "::error title=bissecao: o codigo roda, o pacote nao::nosso app.asar abre pelo Electron original. O defeito esta no empacotamento (Info.plist, fuses ou assinatura), nao no codigo."
+          kill $APID 2>/dev/null
+          DIA=$(cat /tmp/clipcutter-boot.log 2>/dev/null | tr '[:space:]' ' ' | tr -s ' ' | tail -c 700)
+          SAI=$(cat /tmp/asar-solto.log | tr '[:space:]' ' ' | tr -s ' ' | tail -c 700)
+          if [ -s /tmp/clipcutter-boot.log ]; then
+            echo "::error title=bissecao refeita: o codigo RODA no Electron original::DIARIO=[$DIA]"
           else
-            SAIDA_ASAR=$(cat /tmp/asar-solto.log | tr '[:space:]' ' ' | tr -s ' ' | tail -c 1000)
-            DIA=$(cat /tmp/clipcutter-boot.log 2>/dev/null | tr '[:space:]' ' ' | tr -s ' ' | tail -c 500)
-            echo "::error title=bissecao: o codigo tambem morre no Electron original::SAIDA=[${SAIDA_ASAR:-vazia}] DIARIO=[${DIA:-vazio}]"
+            echo "::error title=bissecao refeita: o codigo NAO roda nem no Electron original::diario vazio -- o run #20 foi falso positivo. SAIDA=[${SAI:-vazia}]"
           fi
 
-      # EXPERIMENTO DIRETO sobre a suspeita restante. A bissecao provou que o
-      # codigo roda e o pacote nao. O Info.plist carrega ElectronAsarIntegrity --
-      # um SHA256 do app.asar que o Electron confere antes de carregar, e cuja
-      # divergencia faz o app recusar em silencio, que e o sintoma exato.
-      #
-      # Ha motivo para o hash nao bater: usamos `asarUnpack` (binarios do FFmpeg
-      # precisam ficar FORA do asar para o SO conseguir executa-los), o que
-      # reescreve o app.asar. Se o hash for calculado antes dessa reescrita, ele
-      # nasce velho.
-      #
-      # Remover a chave e reassinar responde de uma vez.
       - name: abre sem a chave de integridade?
         run: |
           set +e
