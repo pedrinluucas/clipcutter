@@ -104,6 +104,29 @@ jobs:
             echo "::error title=build:mac falhou::$(tail -c 1500 build.log | tr '\n' ' ' | tr -s ' ')"
             exit 1
           }
+      # O app EMPACOTAR não significa que ele ABRE. O .dmg da v1.0.0 saiu perfeito
+      # daqui e, no Mac do Pedro, subia e morria sozinho sem escrever uma linha.
+      # O runner do macOS é um Mac de verdade: se o app não fica de pé aqui, o
+      # build falha e ninguém baixa um instalador quebrado.
+      - name: o app abre?
+        run: |
+          APP=$(find dist -maxdepth 3 -name 'ClipCutter.app' -print -quit)
+          BIN="$APP/Contents/MacOS/ClipCutter"
+          echo "testando: $BIN"
+          rm -f "${TMPDIR:-/tmp}/clipcutter-boot.log"
+          "$BIN" &
+          PID=$!
+          sleep 20
+          if kill -0 $PID 2>/dev/null; then
+            echo "de pe apos 20s -- ok"
+            kill $PID 2>/dev/null || true
+            echo '--- diario da inicializacao ---'
+            cat "${TMPDIR:-/tmp}/clipcutter-boot.log" 2>/dev/null || echo '(sem diario)'
+          else
+            DIARIO=$(tr '\n' ' | ' < "${TMPDIR:-/tmp}/clipcutter-boot.log" 2>/dev/null | tail -c 1200)
+            echo "::error title=o app fecha sozinho no macOS::${DIARIO:-diario vazio: morreu antes do primeiro registro}"
+            exit 1
+          fi
       - if: always()
         uses: actions/upload-artifact@v7
         with:

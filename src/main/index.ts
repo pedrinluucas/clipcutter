@@ -1,11 +1,43 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, dialog } from 'electron'
 import { join } from 'path'
+import { appendFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { registerClipScheme, handleClipProtocol } from './protocol'
 import { registerIpc, cancelCurrentJob } from './ipc'
 
+// DIÁRIO DE INICIALIZAÇÃO
+//
+// Em 18/08/2026 o app subiu no macOS e saiu sozinho, sem janela e sem UMA LINHA
+// em lugar nenhum: nada no terminal, nada com ELECTRON_ENABLE_LOGGING=1, nenhum
+// relatório de falha. O log do sistema só dizia `"ClipCutter"(quitting)` — saída
+// limpa e deliberada. Diagnosticar isso custou uma dezena de idas e vindas com o
+// Pedro no Terminal do Mac dele, e mesmo assim não fechou.
+//
+// Um app de desktop que morre calado não é depurável à distância. Este diário
+// existe para que a próxima falha se explique sozinha: fica em TMPDIR, que é
+// sempre gravável (o diretório de dados do app pode nem ter sido criado ainda —
+// foi exatamente o caso), e cada etapa da subida deixa sua marca.
+const BOOT_LOG = join(tmpdir(), 'clipcutter-boot.log')
+
+function boot(etapa: string): void {
+  const linha = `${new Date().toISOString()}  ${etapa}\n`
+  // `console.error` para quem roda pelo terminal; o arquivo para quem abriu com
+  // dois cliques e não tem terminal nenhum.
+  console.error('[boot]', etapa)
+  try {
+    appendFileSync(BOOT_LOG, linha)
+  } catch {
+    // Um diário que quebra o app que ele deveria diagnosticar seria pior que
+    // não existir.
+  }
+}
+
+boot(`inicio  versao=${app.getVersion()}  plataforma=${process.platform}  arch=${process.arch}`)
+
 registerClipScheme()
+boot('protocolo clip:// registrado')
 
 // Referência à janela viva, para o segundo clique no atalho poder trazê-la à
 // frente em vez de abrir um app novo. Ver a trava de instância única no fim.
@@ -36,7 +68,18 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
+    boot('janela pronta -- mostrando')
     mainWindow.show()
+  })
+
+  // `running-NotVisible` no log do macOS foi o único sinal de que a janela nunca
+  // apareceu. Se o conteúdo falhar ao carregar, isso agora fica escrito.
+  mainWindow.webContents.on('did-fail-load', (_e, code, descricao, url) => {
+    boot(`conteudo NAO carregou: ${code} ${descricao} (${url})`)
+  })
+
+  mainWindow.webContents.on('render-process-gone', (_e, detalhes) => {
+    boot(`processo da tela morreu: ${detalhes.reason}`)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -78,10 +121,19 @@ function createWindow(): void {
 //    escrever) perderia a corrida: ambos veem "não existe" e gravam no mesmo nome.
 //
 // Quem chega depois desiste e manda a instância viva se mostrar.
-if (!app.requestSingleInstanceLock()) {
+//
+// A saída NÃO é mais silenciosa. Um `app.quit()` mudo aqui é indistinguível de
+// um app quebrado: foi o que aconteceu no macOS em 18/08/2026, e a trava virou a
+// principal suspeita justamente por ser o único ponto do código que sai sem
+// falar. Se ela recusar de novo, agora fica escrito quem recusou.
+const temTrava = app.requestSingleInstanceLock()
+boot(`trava de instancia unica: ${temTrava ? 'obtida' : 'RECUSADA -- vou sair'}`)
+
+if (!temTrava) {
   app.quit()
 } else {
   app.on('second-instance', () => {
+    boot('segunda instancia bateu na porta -- trazendo a janela')
     if (!janela) return
     if (janela.isMinimized()) janela.restore()
     janela.show()
@@ -95,30 +147,48 @@ if (!app.requestSingleInstanceLock()) {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 function iniciar(): void {
+  boot(`aguardando ready  userData=${app.getPath('userData')}`)
+
   app.whenReady().then(() => {
-    // Set app user model id for windows
-    // Precisa bater com o `appId` do electron-builder.yml. É o que o Windows usa
-    // para agrupar janelas na barra de tarefas e para o ícone do atalho — com o
-    // valor genérico do scaffold, o app apareceria como "electron".
-    electronApp.setAppUserModelId('com.pedrolucas.clipcutter')
+    boot('app pronto')
 
-    // Default open or close DevTools by F12 in development
-    // and ignore CommandOrControl + R in production.
-    // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
-    app.on('browser-window-created', (_, window) => {
-      optimizer.watchWindowShortcuts(window)
-    })
+    try {
+      // Set app user model id for windows
+      // Precisa bater com o `appId` do electron-builder.yml. É o que o Windows usa
+      // para agrupar janelas na barra de tarefas e para o ícone do atalho — com o
+      // valor genérico do scaffold, o app apareceria como "electron".
+      electronApp.setAppUserModelId('com.pedrolucas.clipcutter')
 
-    handleClipProtocol()
-    registerIpc()
+      // Default open or close DevTools by F12 in development
+      // and ignore CommandOrControl + R in production.
+      // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
+      app.on('browser-window-created', (_, window) => {
+        optimizer.watchWindowShortcuts(window)
+      })
 
-    createWindow()
+      handleClipProtocol()
+      registerIpc()
+      boot('protocolo e IPC prontos')
 
-    app.on('activate', function () {
-      // On macOS it's common to re-create a window in the app when the
-      // dock icon is clicked and there are no other windows open.
-      if (BrowserWindow.getAllWindows().length === 0) createWindow()
-    })
+      createWindow()
+      boot('janela criada')
+
+      app.on('activate', function () {
+        // On macOS it's common to re-create a window in the app when the
+        // dock icon is clicked and there are no other windows open.
+        if (BrowserWindow.getAllWindows().length === 0) createWindow()
+      })
+    } catch (erro) {
+      // Sem isto, uma exceção aqui dentro vira uma promise rejeitada que ninguém
+      // ouve: o app fica de pé sem janela, ou sai, e nos dois casos sem explicar.
+      const detalhe = erro instanceof Error ? `${erro.message}\n${erro.stack ?? ''}` : String(erro)
+      boot(`FALHA NA SUBIDA: ${detalhe}`)
+      dialog.showErrorBox(
+        'O ClipCutter não conseguiu abrir',
+        `${detalhe}\n\nO diário da inicialização está em:\n${BOOT_LOG}`
+      )
+      app.exit(1)
+    }
   })
 }
 

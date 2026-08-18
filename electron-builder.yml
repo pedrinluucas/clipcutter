@@ -60,7 +60,7 @@ dmg:
 linux:
   target:
     - AppImage
-  maintainer: pedrolucasdig@gmail.com
+  maintainer: 165915439+pedrinluucas@users.noreply.github.com
   category: AudioVideo
 appImage:
   artifactName: ${name}-${version}.${ext}

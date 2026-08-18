@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Corta vídeos longos em partes menores, por duração automática ou marcação manual.",
   "main": "./out/main/index.js",
-  "author": "pedrolucasdig@gmail.com",
+  "author": "pedrinluucas",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
