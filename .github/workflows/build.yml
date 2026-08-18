@@ -126,7 +126,28 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           path: artefatos
+      # Só os instaladores. `artefatos/**/*` levaria junto os build.log de
+      # diagnóstico — os dois se chamam build.log, colidiriam pelo nome, e a
+      # release é pública e permanente: não é lugar de log de build.
       - uses: softprops/action-gh-release@v2
         with:
-          files: artefatos/**/*
+          files: |
+            artefatos/windows-instalador/*
+            artefatos/macos-dmg/*
           generate_release_notes: true
+          body: |
+            Corta vídeo em partes — por duração fixa ou pelo segundo que você escolher.
+
+            ## Windows
+            Baixe o `.exe` e execute. Se o Windows avisar que bloqueou o app,
+            é por **falta de reputação**, não por vírus: o arquivo acabou de ser
+            compilado e nenhuma máquina no mundo o conhece ainda. Em *Mais informações*
+            → *Executar assim mesmo*.
+
+            ## macOS
+            Baixe o `.dmg` e arraste para Aplicativos. Na primeira vez, abra com
+            **botão direito → Abrir** — o app não é assinado pela Apple, e o duplo
+            clique comum seria recusado.
+
+            > O build do macOS nunca foi testado numa máquina real. Se algo não
+            > funcionar, abra uma issue.
