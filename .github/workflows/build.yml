@@ -51,6 +51,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # `--publish never` NÃO é opcional aqui. O electron-builder detecta que está
+      # num CI e tenta publicar o resultado numa release por conta própria; sem
+      # `GH_TOKEN` ele aborta com "GitHub Personal Access Token is not set" DEPOIS
+      # de ter construído tudo. O job morria com o instalador pronto no disco.
+      # Quem publica é o job `release`, e só quando existe uma tag.
+      #
       # O erro vai para uma ANOTAÇÃO do run, não só para o log.
       # Motivo: o log de um run exige autenticação para ser lido pela API, mas as
       # anotações são públicas. Sem isto, uma falha aqui aparece de fora apenas
@@ -94,7 +100,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: |
           set -o pipefail
-          npm run build:mac 2>&1 | tee build.log || {
+          npm run build:mac -- --publish never 2>&1 | tee build.log || {
             echo "::error title=build:mac falhou::$(tail -c 1500 build.log | tr '\n' ' ' | tr -s ' ')"
             exit 1
           }
