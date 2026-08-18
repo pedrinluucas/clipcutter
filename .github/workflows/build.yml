@@ -256,20 +256,20 @@ jobs:
           ASAR="$APP/Contents/Resources/app.asar"
           EL=node_modules/electron/dist/Electron.app/Contents/MacOS/Electron
 
-          # O que o pacote declara como ponto de entrada?
-          ENTRADA=$(ELECTRON_RUN_AS_NODE=1 "$EL" -e "process.stdout.write(String(require('$ASAR/package.json').main))" 2>&1 | tail -c 200)
+          # Uma substituicao por linha, resultado guardado em variavel. A versao
+          # anterior aninhava $( ) dentro de aspas e a anotacao saiu corrompida
+          # ("ENTRADA=[70:12)").
+          ENTRADA=$(ELECTRON_RUN_AS_NODE=1 "$EL" -p "require('$ASAR/package.json').main" 2>&1 | tail -1)
+          EXISTE=$(ELECTRON_RUN_AS_NODE=1 "$EL" -p "require('fs').existsSync('$ASAR/$ENTRADA')" 2>&1 | tail -1)
 
-          # O arquivo de entrada existe mesmo dentro do asar?
-          EXISTE=$(ELECTRON_RUN_AS_NODE=1 "$EL" -e "process.stdout.write(String(require('fs').existsSync('$ASAR/'+require('$ASAR/package.json').main)))" 2>&1 | tail -c 120)
-
-          # Carregar o bundle de verdade. Espera-se erro ao tocar em `electron`,
-          # mas ANTES disso o diario tem de registrar. Se vier "Cannot find
-          # module", achamos o culpado.
           rm -f /tmp/clipcutter-boot.log
-          CARGA=$(ELECTRON_RUN_AS_NODE=1 "$EL" "$ASAR/$(ELECTRON_RUN_AS_NODE=1 "$EL" -e "process.stdout.write(require('$ASAR/package.json').main)" 2>/dev/null)" 2>&1 | tr '[:space:]' ' ' | tr -s ' ' | tail -c 900)
+          ELECTRON_RUN_AS_NODE=1 "$EL" "$ASAR/$ENTRADA" > /tmp/carga.log 2>&1
+          CODIGO_CARGA=$?
+
+          CARGA=$(cat /tmp/carga.log | tr '[:space:]' ' ' | tr -s ' ' | tail -c 800)
           DIA=$(cat /tmp/clipcutter-boot.log 2>/dev/null | tr '[:space:]' ' ' | tr -s ' ' | tail -c 400)
 
-          echo "::error title=o bundle em modo Node::ENTRADA=[${ENTRADA:-?}] ARQUIVO_EXISTE=[${EXISTE:-?}] DIARIO=[${DIA:-vazio}] ERRO=[${CARGA:-nenhum}]"
+          echo "::error title=o bundle em modo Node::ENTRADA=[${ENTRADA:-?}] EXISTE=[${EXISTE:-?}] CODIGO=[$CODIGO_CARGA] DIARIO=[${DIA:-vazio}] ERRO=[${CARGA:-nenhum}]"
 
       - name: o app abre?
         run: |
