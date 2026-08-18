@@ -249,27 +249,42 @@ jobs:
       # Em modo Node o Electron nao engole excecao: erro de modulo aparece na
       # cara. E o diario nao depende de `electron` -- se o bundle comecar a
       # executar, ele escreve. Isto localiza a falha na LINHA.
-      - name: o bundle carrega em modo Node?
+      # Em modo Node o Electron DESLIGA o suporte a .asar, entao `require` dentro
+      # do pacote falha -- foi o que corrompeu a sonda do run #27. A ferramenta
+      # certa e o @electron/asar.
+      #
+      # Extrair o pacote e rodar o conteudo de uma PASTA responde a pergunta que
+      # importa: o problema e o formato .asar ou o codigo dentro dele? O Electron
+      # aceita os dois, e a unica diferenca e o empacotamento.
+      - name: o codigo roda fora do asar?
         run: |
           set +e
           APP=$(find dist -maxdepth 3 -name 'ClipCutter.app' -print -quit)
           ASAR="$APP/Contents/Resources/app.asar"
           EL=node_modules/electron/dist/Electron.app/Contents/MacOS/Electron
 
-          # Uma substituicao por linha, resultado guardado em variavel. A versao
-          # anterior aninhava $( ) dentro de aspas e a anotacao saiu corrompida
-          # ("ENTRADA=[70:12)").
-          ENTRADA=$(ELECTRON_RUN_AS_NODE=1 "$EL" -p "require('$ASAR/package.json').main" 2>&1 | tail -1)
-          EXISTE=$(ELECTRON_RUN_AS_NODE=1 "$EL" -p "require('fs').existsSync('$ASAR/$ENTRADA')" 2>&1 | tail -1)
+          rm -rf /tmp/app-extraido
+          npx --yes @electron/asar extract "$ASAR" /tmp/app-extraido 2>&1 | tail -2
+          ENTRADA=$(node -p "require('/tmp/app-extraido/package.json').main" 2>&1 | tail -1)
+          EXISTE=$(node -p "require('fs').existsSync('/tmp/app-extraido/' + require('/tmp/app-extraido/package.json').main)" 2>&1 | tail -1)
+
+          # Os binarios do FFmpeg ficam FORA do asar (asarUnpack). Ao rodar da
+          # pasta extraida eles precisam estar ao lado, senao o teste falha por um
+          # motivo que nao e o que se investiga.
+          cp -R "$APP/Contents/Resources/app.asar.unpacked/." /tmp/app-extraido/ 2>/dev/null
 
           rm -f /tmp/clipcutter-boot.log
-          ELECTRON_RUN_AS_NODE=1 "$EL" "$ASAR/$ENTRADA" > /tmp/carga.log 2>&1
-          CODIGO_CARGA=$?
+          "$EL" /tmp/app-extraido > /tmp/pasta.log 2>&1 &
+          PPID2=$!
+          sleep 16
+          VIVO=morreu
+          kill -0 $PPID2 2>/dev/null && VIVO=vivo
+          kill $PPID2 2>/dev/null
 
-          CARGA=$(cat /tmp/carga.log | tr '[:space:]' ' ' | tr -s ' ' | tail -c 800)
-          DIA=$(cat /tmp/clipcutter-boot.log 2>/dev/null | tr '[:space:]' ' ' | tr -s ' ' | tail -c 400)
+          DIA=$(cat /tmp/clipcutter-boot.log 2>/dev/null | tr '[:space:]' ' ' | tr -s ' ' | tail -c 500)
+          SAI=$(cat /tmp/pasta.log | tr '[:space:]' ' ' | tr -s ' ' | tail -c 800)
 
-          echo "::error title=o bundle em modo Node::ENTRADA=[${ENTRADA:-?}] EXISTE=[${EXISTE:-?}] CODIGO=[$CODIGO_CARGA] DIARIO=[${DIA:-vazio}] ERRO=[${CARGA:-nenhum}]"
+          echo "::error title=rodando de uma pasta, fora do asar::ENTRADA=[${ENTRADA:-?}] EXISTE=[${EXISTE:-?}] PROCESSO=[$VIVO] DIARIO=[${DIA:-vazio}] SAIDA=[${SAI:-vazia}]"
 
       - name: o app abre?
         run: |
