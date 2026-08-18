@@ -65,7 +65,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          npm run build:win 2>&1 | tee build.log || {
+          npm run build:win -- --publish never 2>&1 | tee build.log || {
             echo "::error title=build:win falhou::$(tail -c 1500 build.log | tr '\n' ' ' | tr -s ' ')"
             exit 1
           }
