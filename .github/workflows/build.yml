@@ -118,6 +118,11 @@ jobs:
           # A saída do processo vai para arquivo, não só para o log do job: o log
           # exige autenticação para ser lido de fora, e é justamente a mensagem de
           # erro que faz falta. `--enable-logging` solta também o log do Chromium.
+          # `set +e` NAO e opcional: o GitHub roda cada passo com `bash -e`, e o
+          # `wait` abaixo devolve o codigo de falha do app -- o que abortava o
+          # script ANTES da linha que publica a mensagem de erro. O run #11
+          # falhou sem dizer nada por causa disso.
+          set +e
           "$BIN" --enable-logging > saida-do-app.log 2>&1 &
           PID=$!
           sleep 20
@@ -127,7 +132,8 @@ jobs:
             echo '--- diario da inicializacao ---'
             cat "$DIARIO" 2>/dev/null || echo '(sem diario)'
           else
-            wait $PID; CODIGO=$?
+            wait $PID
+            CODIGO=$?
             echo '--- saida do app ---'; cat saida-do-app.log
             echo '--- diario ---'; cat "$DIARIO" 2>/dev/null || echo '(vazio)'
             SAIDA=$(tr '\n' ' ' < saida-do-app.log | tr -s ' ' | tail -c 1400)
