@@ -153,6 +153,37 @@ jobs:
             echo "::error title=bissecao: o codigo tambem morre no Electron original::SAIDA=[${SAIDA_ASAR:-vazia}] DIARIO=[${DIA:-vazio}]"
           fi
 
+      # EXPERIMENTO DIRETO sobre a suspeita restante. A bissecao provou que o
+      # codigo roda e o pacote nao. O Info.plist carrega ElectronAsarIntegrity --
+      # um SHA256 do app.asar que o Electron confere antes de carregar, e cuja
+      # divergencia faz o app recusar em silencio, que e o sintoma exato.
+      #
+      # Ha motivo para o hash nao bater: usamos `asarUnpack` (binarios do FFmpeg
+      # precisam ficar FORA do asar para o SO conseguir executa-los), o que
+      # reescreve o app.asar. Se o hash for calculado antes dessa reescrita, ele
+      # nasce velho.
+      #
+      # Remover a chave e reassinar responde de uma vez.
+      - name: abre sem a chave de integridade?
+        run: |
+          set +e
+          APP=$(find dist -maxdepth 3 -name 'ClipCutter.app' -print -quit)
+          cp -R "$APP" /tmp/SemIntegridade.app
+          plutil -remove ElectronAsarIntegrity /tmp/SemIntegridade.app/Contents/Info.plist
+          codesign -fs - --deep /tmp/SemIntegridade.app 2>/dev/null
+          rm -f /tmp/clipcutter-boot.log
+          /tmp/SemIntegridade.app/Contents/MacOS/ClipCutter > /tmp/sem-integridade.log 2>&1 &
+          SPID=$!
+          sleep 18
+          if kill -0 $SPID 2>/dev/null; then
+            kill $SPID 2>/dev/null
+            echo "::error title=ACHADO: a chave de integridade era a causa::sem ElectronAsarIntegrity o app ABRE. O hash no Info.plist nao corresponde ao app.asar entregue -- provavelmente porque asarUnpack reescreve o arquivo depois do calculo."
+          else
+            S=$(cat /tmp/sem-integridade.log | tr '[:space:]' ' ' | tr -s ' ' | tail -c 800)
+            D=$(cat /tmp/clipcutter-boot.log 2>/dev/null | tr '[:space:]' ' ' | tr -s ' ' | tail -c 400)
+            echo "::error title=nao era a integridade::sem a chave ele morre igual. SAIDA=[${S:-vazia}] DIARIO=[${D:-vazio}]"
+          fi
+
       - name: o app abre?
         run: |
           APP=$(find dist -maxdepth 3 -name 'ClipCutter.app' -print -quit)
