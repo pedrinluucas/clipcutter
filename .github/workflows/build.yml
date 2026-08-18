@@ -256,35 +256,30 @@ jobs:
       # Extrair o pacote e rodar o conteudo de uma PASTA responde a pergunta que
       # importa: o problema e o formato .asar ou o codigo dentro dele? O Electron
       # aceita os dois, e a unica diferenca e o empacotamento.
-      - name: o codigo roda fora do asar?
+      # A verificacao que faltou em 28 rodadas: O QUE EXISTE DENTRO DO app.asar.
+      # Se o arquivo apontado por `main` nao estiver la, o Electron recusa o app
+      # exatamente deste jeito -- sem janela, sem erro, sem uma linha.
+      #
+      # A tentativa anterior de extrair falhou em silencio (o `node -p` seguinte
+      # devolveu o rodape de um erro), entao cada passo aqui e conferido.
+      - name: o que tem dentro do asar?
         run: |
           set +e
           APP=$(find dist -maxdepth 3 -name 'ClipCutter.app' -print -quit)
           ASAR="$APP/Contents/Resources/app.asar"
           EL=node_modules/electron/dist/Electron.app/Contents/MacOS/Electron
 
-          rm -rf /tmp/app-extraido
-          npx --yes @electron/asar extract "$ASAR" /tmp/app-extraido 2>&1 | tail -2
-          ENTRADA=$(node -p "require('/tmp/app-extraido/package.json').main" 2>&1 | tail -1)
-          EXISTE=$(node -p "require('fs').existsSync('/tmp/app-extraido/' + require('/tmp/app-extraido/package.json').main)" 2>&1 | tail -1)
+          npx --yes @electron/asar list "$ASAR" > /tmp/lista.txt 2>/tmp/lista-erro.txt
+          TOTAL=$(wc -l < /tmp/lista.txt | tr -d ' ')
+          ERRO_LISTA=$(tail -c 200 /tmp/lista-erro.txt)
+          RAIZ=$(grep -E '^/[^/]+$' /tmp/lista.txt | head -12 | tr '[:space:]' ' ')
+          TEM_MAIN=$(grep -c '/out/main/index.js' /tmp/lista.txt)
+          TEM_RENDERER=$(grep -c '/out/renderer/index.html' /tmp/lista.txt)
 
-          # Os binarios do FFmpeg ficam FORA do asar (asarUnpack). Ao rodar da
-          # pasta extraida eles precisam estar ao lado, senao o teste falha por um
-          # motivo que nao e o que se investiga.
-          cp -R "$APP/Contents/Resources/app.asar.unpacked/." /tmp/app-extraido/ 2>/dev/null
+          npx --yes @electron/asar extract-file "$ASAR" package.json > /tmp/pkg.json 2>/dev/null
+          MAIN=$(node -p "JSON.parse(require('fs').readFileSync('/tmp/pkg.json','utf8')).main" 2>&1 | tail -1)
 
-          rm -f /tmp/clipcutter-boot.log
-          "$EL" /tmp/app-extraido > /tmp/pasta.log 2>&1 &
-          PPID2=$!
-          sleep 16
-          VIVO=morreu
-          kill -0 $PPID2 2>/dev/null && VIVO=vivo
-          kill $PPID2 2>/dev/null
-
-          DIA=$(cat /tmp/clipcutter-boot.log 2>/dev/null | tr '[:space:]' ' ' | tr -s ' ' | tail -c 500)
-          SAI=$(cat /tmp/pasta.log | tr '[:space:]' ' ' | tr -s ' ' | tail -c 800)
-
-          echo "::error title=rodando de uma pasta, fora do asar::ENTRADA=[${ENTRADA:-?}] EXISTE=[${EXISTE:-?}] PROCESSO=[$VIVO] DIARIO=[${DIA:-vazio}] SAIDA=[${SAI:-vazia}]"
+          echo "::error title=conteudo do asar::ITENS=[$TOTAL] ERRO=[${ERRO_LISTA:-nenhum}] RAIZ=[${RAIZ:-vazia}] TEM_MAIN=[$TEM_MAIN] TEM_RENDERER=[$TEM_RENDERER] MAIN_DECLARADO=[${MAIN:-?}]"
 
       - name: o app abre?
         run: |
