@@ -184,6 +184,30 @@ jobs:
             echo "::error title=nao era a integridade::sem a chave ele morre igual. SAIDA=[${S:-vazia}] DIARIO=[${D:-vazio}]"
           fi
 
+      # Nao era a integridade (run #21). Restam: o Info.plist, os processos
+      # auxiliares que o electron-builder renomeia, ou a forma como o executavel
+      # localiza o app. Estas sondas separam os tres.
+      - name: onde exatamente o bundle quebra?
+        run: |
+          set +e
+          APP=$(find dist -maxdepth 3 -name 'ClipCutter.app' -print -quit)
+          BIN="$APP/Contents/MacOS/ClipCutter"
+
+          # 1. O executavel EMPACOTADO, mandado abrir o asar explicitamente. Se
+          #    funcionar, o binario e os auxiliares estao sadios e o problema e so
+          #    como ele DESCOBRE o app sozinho.
+          rm -f /tmp/clipcutter-boot.log
+          "$BIN" "$APP/Contents/Resources/app.asar" > /tmp/explicito.log 2>&1 &
+          EPID=$!
+          sleep 16
+          if kill -0 $EPID 2>/dev/null; then kill $EPID 2>/dev/null; EXPLICITO="ABRIU"; else EXPLICITO="morreu"; fi
+
+          LINT=$(plutil -lint "$APP/Contents/Info.plist" 2>&1 | tail -c 120)
+          AUX=$(ls "$APP/Contents/Frameworks" 2>/dev/null | tr '[:space:]' ' ' | tr -s ' ' | tail -c 300)
+          PLIST=$(plutil -p "$APP/Contents/Info.plist" 2>/dev/null | grep -iE "CFBundleExecutable|CFBundleIdentifier|CFBundleName|LSMinimum|NSDocuments|NSDownloads|Usage" | tr '[:space:]' ' ' | tr -s ' ' | tail -c 600)
+
+          echo "::error title=onde o bundle quebra::ASAR_EXPLICITO=[$EXPLICITO] PLIST_VALIDO=[${LINT:-?}] AUXILIARES=[${AUX:-nenhum}] CHAVES=[${PLIST:-?}]"
+
       - name: o app abre?
         run: |
           APP=$(find dist -maxdepth 3 -name 'ClipCutter.app' -print -quit)
