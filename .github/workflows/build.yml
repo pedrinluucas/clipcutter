@@ -241,6 +241,36 @@ jobs:
           FUSES=$(npx --yes @electron/fuses read --app "$APP" 2>&1 | tr '[:space:]' ' ' | tr -s ' ' | tail -c 900)
           echo "::error title=estado real dos fuses::${FUSES:-nao consegui ler}"
 
+      # O run #25 derrubou a bissecao: o codigo nao roda nem pelo Electron
+      # original, e o diario fica vazio -- entao o problema esta no app.asar ou no
+      # meu codigo dentro dele. Mas nenhum dos dois imprime erro, o que e muito
+      # estranho para uma falha de JavaScript.
+      #
+      # Em modo Node o Electron nao engole excecao: erro de modulo aparece na
+      # cara. E o diario nao depende de `electron` -- se o bundle comecar a
+      # executar, ele escreve. Isto localiza a falha na LINHA.
+      - name: o bundle carrega em modo Node?
+        run: |
+          set +e
+          APP=$(find dist -maxdepth 3 -name 'ClipCutter.app' -print -quit)
+          ASAR="$APP/Contents/Resources/app.asar"
+          EL=node_modules/electron/dist/Electron.app/Contents/MacOS/Electron
+
+          # O que o pacote declara como ponto de entrada?
+          ENTRADA=$(ELECTRON_RUN_AS_NODE=1 "$EL" -e "process.stdout.write(String(require('$ASAR/package.json').main))" 2>&1 | tail -c 200)
+
+          # O arquivo de entrada existe mesmo dentro do asar?
+          EXISTE=$(ELECTRON_RUN_AS_NODE=1 "$EL" -e "process.stdout.write(String(require('fs').existsSync('$ASAR/'+require('$ASAR/package.json').main)))" 2>&1 | tail -c 120)
+
+          # Carregar o bundle de verdade. Espera-se erro ao tocar em `electron`,
+          # mas ANTES disso o diario tem de registrar. Se vier "Cannot find
+          # module", achamos o culpado.
+          rm -f /tmp/clipcutter-boot.log
+          CARGA=$(ELECTRON_RUN_AS_NODE=1 "$EL" "$ASAR/$(ELECTRON_RUN_AS_NODE=1 "$EL" -e "process.stdout.write(require('$ASAR/package.json').main)" 2>/dev/null)" 2>&1 | tr '[:space:]' ' ' | tr -s ' ' | tail -c 900)
+          DIA=$(cat /tmp/clipcutter-boot.log 2>/dev/null | tr '[:space:]' ' ' | tr -s ' ' | tail -c 400)
+
+          echo "::error title=o bundle em modo Node::ENTRADA=[${ENTRADA:-?}] ARQUIVO_EXISTE=[${EXISTE:-?}] DIARIO=[${DIA:-vazio}] ERRO=[${CARGA:-nenhum}]"
+
       - name: o app abre?
         run: |
           APP=$(find dist -maxdepth 3 -name 'ClipCutter.app' -print -quit)
