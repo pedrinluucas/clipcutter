@@ -208,6 +208,26 @@ jobs:
 
           echo "::error title=onde o bundle quebra::ASAR_EXPLICITO=[$EXPLICITO] PLIST_VALIDO=[${LINT:-?}] AUXILIARES=[${AUX:-nenhum}] CHAVES=[${PLIST:-?}]"
 
+      # `--enable-logging` sozinho, no macOS, manda o log do Chromium para um
+      # ARQUIVO (chrome_debug.log), nao para a saida padrao. Pode ser que ele
+      # venha explicando o problema desde o run #11 num lugar que eu nunca li.
+      # `=stderr` forca na saida; `--v=1` liga o detalhe.
+      - name: o Chromium diz alguma coisa?
+        run: |
+          set +e
+          APP=$(find dist -maxdepth 3 -name 'ClipCutter.app' -print -quit)
+          BIN="$APP/Contents/MacOS/ClipCutter"
+          rm -f /tmp/verboso.log
+          "$BIN" --enable-logging=stderr --v=1 > /tmp/verboso.log 2>&1 &
+          VPID=$!
+          sleep 16
+          kill $VPID 2>/dev/null
+          VERB=$(cat /tmp/verboso.log | tr '[:space:]' ' ' | tr -s ' ' | tail -c 1200)
+          # E se ele escreveu num arquivo, achar o arquivo.
+          ACHADO=$(find "$HOME/Library/Application Support" /tmp -name 'chrome_debug.log' -newermt '-3 minutes' 2>/dev/null | head -2 | tr '[:space:]' ' ')
+          CONTEUDO=$(cat $(echo $ACHADO | awk '{print $1}') 2>/dev/null | tr '[:space:]' ' ' | tr -s ' ' | tail -c 600)
+          echo "::error title=o que o Chromium disse::VERBOSO=[${VERB:-vazio}] ARQUIVO_LOG=[${ACHADO:-nenhum}] CONTEUDO=[${CONTEUDO:-vazio}]"
+
       - name: o app abre?
         run: |
           APP=$(find dist -maxdepth 3 -name 'ClipCutter.app' -print -quit)
