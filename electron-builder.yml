@@ -50,6 +50,19 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
+  # `-` = ASSINATURA AD-HOC, feita pela propria maquina que compila, sem
+  # certificado da Apple e sem custo.
+  #
+  # NAO e cosmetica. Em Apple Silicon o macOS RECUSA executar binario sem
+  # assinatura nenhuma -- e recusa em silencio, sem dialogo, sem log, sem saida no
+  # terminal. Foi o que aconteceu com o .dmg da v1.0.0: abria e fechava na hora,
+  # tanto no M2 do Pedro quanto no runner do CI (que tambem e Apple Silicon).
+  # Um Mac Intel teria aberto, e por isso o defeito passou despercebido.
+  #
+  # Ad-hoc NAO substitui a assinatura da Apple: o app continua "de
+  # desenvolvedor nao identificado" e exige botao direito > Abrir na primeira vez.
+  # A diferenca e entre "abre com aviso" e "nao abre de jeito nenhum".
+  identity: '-'
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSDocumentsFolderUsageDescription: O ClipCutter precisa ler os vídeos que você escolher.

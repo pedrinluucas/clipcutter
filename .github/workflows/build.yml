@@ -91,13 +91,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      # Sem certificado da Apple, o electron-builder tentaria assinar e falharia.
-      # Desligar a busca automática produz um .dmg NÃO assinado: funciona, mas o
-      # macOS exige abrir a primeira vez com botão direito > Abrir.
+      # NÃO volte a pôr `CSC_IDENTITY_AUTO_DISCOVERY: false` aqui. Ele fazia o
+      # electron-builder pular a assinatura por completo, e em Apple Silicon o
+      # macOS recusa executar binário sem assinatura -- em silêncio. A assinatura
+      # ad-hoc está declarada em electron-builder.yml (`mac.identity: '-'`), que é
+      # o suficiente para o app abrir sem certificado da Apple.
       - name: build:mac
         shell: bash
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
         run: |
           set -o pipefail
           npm run build:mac -- --publish never 2>&1 | tee build.log || {
@@ -135,6 +135,10 @@ jobs:
             wait $PID
             CODIGO=$?
             echo '--- saida do app ---'; cat saida-do-app.log
+            echo '--- assinatura ---'
+            codesign -dv --verbose=2 "$APP" 2>&1 | head -12
+            echo '--- o que o sistema anotou ---'
+            log show --last 2m --predicate 'eventMessage CONTAINS "ClipCutter"' --info 2>/dev/null | grep -iE "signature|denied|kill|invalid|taskgated|trust" | head -10
             echo '--- diario ---'; cat "$DIARIO" 2>/dev/null || echo '(vazio)'
             SAIDA=$(tr '\n' ' ' < saida-do-app.log | tr -s ' ' | tail -c 1400)
             echo "::error title=o app fecha sozinho no macOS (codigo $CODIGO)::${SAIDA:-sem saida nenhuma; diario: $(tr '\n' ' ' < "$DIARIO" 2>/dev/null | tail -c 400)}"
